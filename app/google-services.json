@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "67997425312",
+    "project_id": "minka-art",
+    "storage_bucket": "minka-art.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:67997425312:android:1978b6c53c42416459b3c5",
+        "android_client_info": {
+          "package_name": "com.minkaart2.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9fZNf1SaK8FsdqgrwlBuRH8gdMwD-KSo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
