@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
+import com.minkaart2.app.data.model.User
 
 class AuthRepository {
 
@@ -79,6 +80,64 @@ class AuthRepository {
 
             onError = onError
         )
+    }
+
+    fun obtenerUsuarioActual(
+        onSuccess: (User) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val usuarioActual = auth.currentUser
+
+        if (usuarioActual == null) {
+            onError("No hay un usuario autenticado")
+            return
+        }
+
+        firestore.collection("usuarios")
+            .document(usuarioActual.uid)
+            .get()
+            .addOnSuccessListener { documento ->
+
+                val usuario = documento.toObject(User::class.java)
+
+                if (usuario == null) {
+                    onError("No se encontró la información del usuario")
+                } else {
+                    onSuccess(usuario)
+                }
+            }
+            .addOnFailureListener {
+                onError(
+                    it.message ?: "Error al consultar los datos del usuario"
+                )
+            }
+    }
+
+    fun obtenerUsuarioPorId(
+        uid: String,
+        onSuccess: (User) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        firestore.collection("usuarios")
+            .document(uid)
+            .get()
+            .addOnSuccessListener { documento ->
+
+                val usuario = documento.toObject(User::class.java)
+
+                if (usuario == null) {
+                    onError("No se encontró la información del artesano")
+                } else {
+                    onSuccess(usuario)
+                }
+            }
+            .addOnFailureListener {
+                onError(
+                    it.message ?: "Error al consultar los datos del artesano"
+                )
+            }
     }
 
     fun recuperarContraseña(

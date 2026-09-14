@@ -18,5 +18,19 @@ object Routes {
 
     const val MY_PRODUCTS = "my_products"
 
+    const val EDIT_PRODUCT = "edit_product/{productId}"
+
+    fun editarProductoRoute(productId: String) = "edit_product/$productId"
+
+    const val PRODUCT_DETAIL = "product_detail/{productId}"
+
+    fun productDetailRoute(productId: String) = "product_detail/$productId"
+
+    const val LIKES = "likes"
+
+    const val RUAC_BADGE = "ruac_badge/{artesanoId}"
+
+    fun ruacBadgeRoute(artesanoId: String) = "ruac_badge/$artesanoId"
+
     const val RECOGNITION = "recognition"
 }

@@ -12,8 +12,9 @@ MinkaArt tiene dos tipos de usuario, definidos por el campo `rol` (`"cliente"` o
 - **Artesano**: se registra con datos adicionales (teléfono, fecha de nacimiento, región,
   qué productos vende, categorías artesanales) y puede publicar artesanías con foto,
   precio, descripción, historia/proceso de elaboración y región de origen.
-- **Cliente**: se registra con los datos básicos y consume el catálogo (la pantalla de
-  cliente hoy es un placeholder, ver [Estado actual y pendientes](#estado-actual-y-pendientes)).
+- **Cliente**: se registra con los datos básicos y consume el catálogo de todos los
+  artesanos, con búsqueda, filtro por categoría, "me gusta" y detalle de producto con
+  contacto por WhatsApp (ver [Flujos principales](#flujos-principales)).
 
 El registro de artesano incluye un campo opcional de **RUAC** (Registro Único de
 Artesanos y Artesanas de Colombia, la acreditación oficial de Artesanías de Colombia): si
@@ -86,9 +87,10 @@ app/src/main/java/com/minkaart/app/
 │   ├── AppNavigation.kt      # NavHost con todas las rutas registradas
 │   └── Routes.kt             # constantes de ruta (String)
 ├── repository/
-│   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña
-│   └── ProductRepository.kt  # guardar producto (con/sin imagen), listar "mis productos"
+│   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos del usuario actual
+│   └── ProductRepository.kt  # guardar/editar/eliminar producto (con/sin imagen), listar "mis productos", consultar uno por id
 ├── viewModel/                 # ¡ojo con mayúscula/minúscula, ver más abajo!
+│   ├── HomeArtesanoViewModel.kt
 │   ├── LoginViewModel.kt
 │   ├── ProductViewModel.kt
 │   └── RegisterViewModel.kt
@@ -96,17 +98,23 @@ app/src/main/java/com/minkaart/app/
     ├── components/                # Composables reutilizables del brand kit v2
     │   ├── PatternBackground.kt   # degradado + patrón textil, con blur opcional
     │   ├── GlassCard.kt           # tarjeta "de vidrio esmerilado"
-    │   ├── GlassTextField.kt      # campo con ícono y línea inferior
+    │   ├── GlassTextField.kt      # campo con ícono y línea inferior (fondo oscuro)
     │   ├── GradientButton.kt      # botón con degradado + variante outline
-    │   └── RolePillToggle.kt      # selector Artesano/Cliente en pills
+    │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills
+    │   ├── ImageUploadBox.kt      # caja de selección/preview de imagen (Publicar/Editar)
+    │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
+    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, likes, RUAC)
+    │   └── ConfianzaDots.kt       # fila de 4 puntos (calidad/confianza), gris si no hay dato
     ├── home/
     │   ├── HomeArtesanoScreen.kt
-    │   └── HomeClienteScreen.kt   # placeholder
+    │   └── HomeClienteScreen.kt   # catálogo del cliente: búsqueda, chips, feed, bottom nav
     ├── login/LoginScreen.kt
+    ├── product/ProductDetailScreen.kt  # detalle, artesano, calidad/confianza, contacto WhatsApp
     ├── profile/ProfileScreen.kt   # placeholder
     ├── publication/
-    │   ├── MyProductsScreen.kt
-    │   └── PublicationScreen.kt
+    │   ├── MyProductsScreen.kt    # "Panel de Publicaciones": lista, editar/eliminar (menú ⋮)
+    │   ├── PublicationScreen.kt
+    │   └── EditProductScreen.kt
     ├── register/RegisterScreen.kt
     ├── welcome/WelcomeScreen.kt
     └── theme/
@@ -144,12 +152,16 @@ de `AppNavigation.kt`:
 | `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial) | — |
 | `LOGIN` | `login` | `LoginScreen` | Sí | `WelcomeScreen`, `LoginScreen` (recuperar contraseña) |
 | `REGISTER` | `register` | `RegisterScreen` | Sí | `WelcomeScreen` |
-| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (placeholder) | Sí | `LoginScreen` (rol `cliente`) |
+| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`) |
 | `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`) |
-| `MY_PRODUCTS` | `my_products` | `MyProductsScreen` | Sí | `HomeArtesanoScreen` |
-| `PUBLICATION` | `publication` | `PublicationScreen` | Sí | `HomeArtesanoScreen` |
-| `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie navega hacia ella todavía |
-| `RECOGNITION` | `recognition` | — | **No** — declarada en `Routes` pero sin `composable {}` | Nadie |
+| `MY_PRODUCTS` | `my_products` | `MyProductsScreen` (Panel de Publicaciones) | Sí | `HomeArtesanoScreen` |
+| `PUBLICATION` | `publication` | `PublicationScreen` | Sí | `HomeArtesanoScreen`, `MyProductsScreen` (chip "Nueva") |
+| `EDIT_PRODUCT` | `edit_product/{productId}` | `EditProductScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → Editar) |
+| `PRODUCT_DETAIL` | `product_detail/{productId}` | `ProductDetailScreen` | Sí, con argumento de ruta | `HomeClienteScreen` (tap en una tarjeta del feed) |
+| `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | `HomeClienteScreen` (bottom nav "Perfil") |
+| `LIKES` | `likes` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (bottom nav "Likes") |
+| `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `PlaceholderScreen` | Sí, con argumento de ruta | `ProductDetailScreen` (tap en la fila del artesano) |
+| `RECOGNITION` | `recognition` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
 
 ## Modelo de datos
 
@@ -188,9 +200,39 @@ Firestore (`document()` sin argumentos).
 | `historiaProceso` | `String` | Historia / proceso de elaboración |
 | `regionOrigen` | `String` | |
 | `imagenes` | `List<String>` | URLs de Storage; en la práctica el flujo actual solo guarda una |
+| `vistas` | `Long` | Por defecto `0`; el campo existe pero todavía no hay ningún flujo (detalle de producto, vista del cliente) que lo incremente |
+| `likes` | `Long` | Por defecto `0`. Se incrementa/decrementa con `ProductRepository.alternarLike`, en una transacción junto con `productos/{id}/likes/{uid}` (ver más abajo) |
+| `activo` | `Boolean` | Por defecto `true`. El artesano lo cambia desde el Panel de Publicaciones (menú ⋮ → Pausar/Activar); el catálogo del cliente (`HomeClienteScreen`) solo muestra los productos con `activo == true` |
+| `fechaPublicacion` | `Long` | Epoch millis, con el reloj del dispositivo (no `FieldValue.serverTimestamp()`); `0` en productos publicados antes de agregar este campo |
+| `categoria` | `String` | Texto libre (ej. "Tejidos", "Cerámica"); alimenta los chips de filtro del catálogo de cliente. Puede quedar vacío |
+| `calidadPromedio` | `Double?` | `null` hasta que exista la fase de "Valorar compra"; la UI lo trata como "sin valoraciones aún" en vez de inventar un valor |
+| `confianzaPromedio` | `Double?` | Mismo caso que `calidadPromedio` |
 
 Ambos `data class` declaran valores por defecto en todos los campos: es un requisito de
-`DocumentSnapshot.toObject()` de Firestore, no un estilo opcional.
+`DocumentSnapshot.toObject()` de Firestore, no un estilo opcional. Gracias a eso, agregar
+campos nuevos a `Product` es retrocompatible sin ningún script de migración: los documentos
+ya existentes en Firestore, que no tienen esos campos, se leen con sus valores por defecto
+automáticamente. **Importante**: ese valor por defecto solo aplica *después* de traer el
+documento — un filtro de Firestore como `whereEqualTo("activo", true)` no encuentra los
+documentos que nunca tuvieron el campo escrito, aunque el default en Kotlin sea `true`. Por
+eso `obtenerTodosLosProductosActivos` trae todos los productos y filtra `activo` **en
+memoria**, no en el propio query — así los productos publicados antes de agregar el campo
+también aparecen en el catálogo.
+
+### Firestore — colección `productos/{autoId}/likes/{uid}`
+
+Subcolección: un documento por usuario que le dio "me gusta" a ese producto.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `userId` | `String` | Igual al id del documento; se guarda también como campo para poder hacer `collectionGroup("likes").whereEqualTo("userId", uid)` y saber en una sola consulta qué productos ya le gustan al usuario actual, sin una consulta por cada tarjeta del feed |
+| `creadoEn` | `Timestamp` | `FieldValue.serverTimestamp()` |
+
+`ProductRepository.alternarLike` crea o borra este documento y ajusta `likes` en el
+producto padre dentro de la misma transacción de Firestore, para que nunca queden
+desincronizados. La consulta por `collectionGroup` requiere un índice de campo único con
+alcance de grupo de colección, declarado en `firestore.indexes.json` (`fieldOverrides`, no
+el arreglo `indexes` — ese es solo para índices compuestos).
 
 ### Firestore — colección `codigosVerificacion/{correo}`
 
@@ -251,9 +293,54 @@ pueda reutilizarse.
   valida todos los campos y que haya una imagen seleccionada, sube la imagen a Storage,
   obtiene su `downloadUrl` y solo entonces escribe el producto en Firestore — el orden
   importa, si la subida falla no se crea el documento.
-- **Mis publicaciones** (`MyProductsScreen`): al entrar, dispara
-  `cargarMisProductos()`, que filtra `productos` por `artesanoId == uid actual` y
-  muestra tarjetas con imagen, nombre, precio y región.
+- **Gestión de productos** (`HomeArtesanoScreen` → `MyProductsScreen` "Panel de
+  Publicaciones" → `EditProductScreen`): el Home del artesano saluda por nombre (vía
+  `HomeArtesanoViewModel.cargarDatosArtesano` → `AuthRepository.obtenerUsuarioActual`) y
+  muestra una vista previa de hasta 4 productos; el botón "Ver publicaciones" lleva al
+  Panel, que lista todos los productos del artesano con un menú de tres puntos por
+  tarjeta:
+  - **Editar** navega a `EditProductScreen` (ruta `edit_product/{productId}`), que carga
+    el producto con `ProductViewModel.obtenerProductoPorId`, precarga el formulario y,
+    al guardar, llama a `actualizarProducto` (mismas validaciones que publicar) y vuelve
+    al Panel.
+  - **Eliminar** muestra un `AlertDialog` de confirmación antes de llamar a
+    `ProductViewModel.eliminarProducto`, que borra el documento en Firestore y lo quita
+    de la lista en memoria al instante.
+  - **Pausar publicación / Activar publicación** llama a
+    `ProductViewModel.cambiarEstadoProducto`, que actualiza solo el campo `activo` en
+    Firestore (`update()` parcial, no reescribe el resto del documento) y refleja el
+    cambio al instante en la lista en memoria. Cada tarjeta muestra además "`{vistas}`
+    vistas · `{likes}` likes" (`vistas` siempre en 0 por ahora; `likes` sí sube cuando un
+    cliente le da "me gusta" al producto, ver más abajo) y, si el producto tiene
+    `fechaPublicacion`, "Publicado el dd/MM/yyyy".
+  - El Panel se refresca automáticamente cada vez que vuelve a primer plano
+    (`ON_RESUME`), para que los cambios de Editar/Publicar se vean sin reiniciar la app —
+    Navigation Compose mantiene su `ProductViewModel` vivo en el back stack, así que un
+    `LaunchedEffect(Unit)` por sí solo no bastaría.
+- **Catálogo del cliente** (`HomeClienteScreen` → `HomeClienteViewModel`): barra de
+  búsqueda (el ícono de cámara navega a `Routes.RECOGNITION`, todavía un
+  `PlaceholderScreen` — el reconocimiento visual con OpenCV es de otra fase) y chips de
+  categoría armados dinámicamente a partir de las categorías distintas presentes en los
+  productos cargados, no de una lista fija. El feed (`obtenerTodosLosProductosActivos`)
+  trae los productos de **todos** los artesanos, a diferencia del Panel de Publicaciones,
+  que solo trae los propios; el nombre del artesano de cada tarjeta se resuelve con
+  `AuthRepository.obtenerUsuarioPorId`, cacheado por `artesanoId` en el ViewModel para no
+  repetir la consulta por cada producto del mismo artesano. El corazón de cada tarjeta usa
+  `productosLikeados` (`ProductRepository.obtenerProductosLikeadosPorUsuario`, una sola
+  consulta con `collectionGroup` en vez de una por tarjeta) para saber si ya se le dio like.
+  Tap en una tarjeta navega a `Routes.productDetailRoute(productId)`. El bottom nav
+  reutiliza `Routes.PROFILE` para "Perfil" y navega a `Routes.LIKES` (placeholder) desde
+  "Likes"; "Buscar" no navega a ningún lado, solo hay una barra de búsqueda en esta misma
+  pantalla.
+- **Detalle y contacto** (`ProductDetailScreen` → `ProductDetailViewModel`): encadena dos
+  lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
+  `obtenerUsuarioPorId`) porque Firestore no tiene joins. Muestra nombre, precio,
+  categoría, descripción, historia y región del producto, y una fila con el artesano
+  (nombre, teléfono, insignia RUAC en miniatura si `tieneRuac`) que navega a
+  `Routes.ruacBadgeRoute(artesanoId)` (placeholder). Dos filas de `ConfianzaDots` para
+  calidad y confianza. El botón "Contactar artesano" limpia el teléfono a solo dígitos y
+  abre `https://wa.me/<numero>?text=<mensaje>` con un intent `ACTION_VIEW`; si no hay
+  ninguna app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual.
 
 ## Diseño y marca
 
@@ -341,11 +428,18 @@ Detalle de la configuración en `functions/SETUP.md`.
 **Implementado**
 - Registro de cliente y artesano (con validaciones), incluido el flujo de RUAC.
 - Login con Firebase Auth y enrutado según rol.
-- Publicación de una artesanía con imagen, historia y datos comerciales.
-- Listado de "mis publicaciones" para el artesano autenticado.
+- Publicación de una artesanía con imagen, historia y datos comerciales, con el diseño del
+  brand kit v2 (Fase 2).
+- Home del artesano con saludo por nombre y vista previa de sus productos (Fase 2).
+- Panel de Publicaciones para el artesano autenticado: listar, editar y eliminar (con
+  confirmación) sus productos (Fase 2).
+- Catálogo del cliente (`HomeClienteScreen`): feed de productos de todos los artesanos,
+  búsqueda visual, chips de categoría, like con contador real, y Detalle de producto con
+  datos del artesano y contacto por WhatsApp (Fase 3).
 - Identidad visual del brand kit v2 (paleta guinda/borgoña/azul, Fraunces + Plus Jakarta
-  Sans, patrón textil) aplicada en Entrada, Login y Registro — Home cliente/artesano,
-  publicación y perfil siguen con el estilo anterior, pendientes de una fase futura.
+  Sans, patrón textil) aplicada en Entrada, Login, Registro (Fase 1), Home Artesano, Panel
+  de Publicaciones, Publicar y Editar producto (Fase 2), y Home Cliente y Detalle de
+  producto (Fase 3) — solo `ProfileScreen` sigue siendo un placeholder sin estilo propio.
 - Verificación de correo obligatoria en el registro, por código de 6 dígitos generado y
   validado por Cloud Functions (no por el mecanismo nativo de Firebase Auth): la cuenta
   de Firebase Auth y el documento en `usuarios` solo se crean **después** de verificar
@@ -354,19 +448,39 @@ Detalle de la configuración en `functions/SETUP.md`.
   Functions `enviarCodigoVerificacion` / `verificarCodigo`).
 
 **Pendiente / placeholder**
-- `HomeClienteScreen.kt` y `ProfileScreen.kt` son literalmente un `Text()` de una línea;
-  no hay catálogo para el cliente ni pantalla de perfil real.
-- `Routes.RECOGNITION` está declarada pero no tiene `composable {}` registrado — navegar
-  a ella provocaría un crash.
-- Nada navega hacia `Routes.PROFILE` todavía, aunque la ruta sí está registrada.
+- `ProfileScreen.kt` sigue siendo un `Text()` de una línea, sin diseño ni datos reales —
+  el bottom nav del cliente ya navega hacia ella, pero la pantalla en sí es de una fase
+  futura.
+- `Routes.RECOGNITION`, `Routes.LIKES` y `Routes.RUAC_BADGE` están registradas y navegables
+  desde `HomeClienteScreen`/`ProductDetailScreen`, pero apuntan a un `PlaceholderScreen`
+  genérico — el reconocimiento visual (OpenCV), la lista de likes y la insignia RUAC real
+  son de fases futuras.
 - Tras un registro exitoso, `RegisterScreen` solo muestra un `Toast`: no navega a login
   ni a ninguna otra pantalla.
-- No existe ningún flujo de catálogo/compra para el cliente: `ProductRepository` solo
-  sabe leer los productos del artesano autenticado (`obtenerMisProductos`), no hay una
-  consulta que traiga productos de todos los artesanos.
 - `ProductRepository.guardarProducto()` (variante sin imagen) existe pero no lo invoca
   ninguna pantalla; solo se usa `guardarProductoConImagen()`.
-- El modelo `Product.imagenes` es una lista, pero el flujo actual solo guarda una imagen.
+- El modelo `Product.imagenes` es una lista, pero el flujo actual solo guarda una imagen
+  (`actualizarProducto` sigue esa misma convención: reemplaza la lista completa por una
+  sola URL cuando se sube una imagen nueva).
+- `ProductRepository.eliminarProducto()` borra el documento en Firestore pero no la imagen
+  asociada en Storage — queda huérfana. No se pidió limpiarla y ninguna otra función del
+  proyecto lo hace tampoco hoy.
+- La región de origen sigue siendo un campo de texto libre (en Publicar y Editar); el
+  mockup la dibuja como un selector, pero no hay ninguna lista de regiones definida en el
+  proyecto. Lo mismo aplica a `categoria`: es texto libre, sin una taxonomía fija.
+- `vistas` se queda en 0: no hay pantalla que registre visitas a un producto. `likes` sí es
+  real (el corazón del feed y del Detalle lo incrementan/decrementan de verdad).
+- `calidadPromedio`/`confianzaPromedio` existen en el modelo pero nunca se calculan — la
+  UI los muestra como "sin valoraciones aún" (puntos grises) hasta que exista la fase de
+  "Valorar compra".
+- Las reglas de Firestore permiten leer el documento completo de `usuarios/{uid}` a
+  cualquier usuario autenticado (antes solo el propio uid podía leerlo) — necesario para
+  que el cliente vea nombre/teléfono/RUAC del artesano en el Detalle de producto. Efecto
+  secundario aceptado: campos no pensados para mostrarse (correo, fecha de nacimiento,
+  número de RUAC) también quedan visibles para cualquier usuario con sesión; no existe un
+  documento de "perfil público" separado.
+- No hay pantalla de "Perfil del cliente" ni "Perfil del artesano" reales — ambas
+  reutilizan hoy el mismo `ProfileScreen.kt` placeholder.
 - El RUAC se recibe y se guarda, pero no hay ninguna verificación real del documento ni
   del número.
 - Un correo que ya tiene cuenta en Firebase Auth solo se detecta al final del registro,
