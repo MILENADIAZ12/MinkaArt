@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -51,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -62,7 +67,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.minkaart2.app.data.model.Product
+import com.minkaart2.app.util.normalizar
 import com.minkaart2.app.viewModel.ProductViewModel
+import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -89,6 +96,20 @@ fun MyProductsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var productoAEliminar by remember { mutableStateOf<Product?>(null) }
+
+    // Mismo patrón de filtro (texto + categoría, combinados con AND) que ya usa
+    // HomeClienteScreen, reutilizando la función normalizar() compartida en vez de
+    // reimplementar la lógica — aquí se aplica solo sobre "misProductos" (el catálogo
+    // propio del artesano), no sobre el catálogo general.
+    var categoriaSeleccionada by remember { mutableStateOf("Todos") }
+
+    var textoBusqueda by remember { mutableStateOf("") }
+    var textoBusquedaDebounced by remember { mutableStateOf("") }
+
+    LaunchedEffect(textoBusqueda) {
+        delay(300)
+        textoBusquedaDebounced = textoBusqueda
+    }
 
     LaunchedEffect(Unit) {
 
@@ -124,6 +145,32 @@ fun MyProductsScreen(
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val categorias = remember(productos) {
+        listOf("Todos") + productos
+            .map { it.categoria.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
+
+    val textoBuscadoNormalizado = remember(textoBusquedaDebounced) {
+        normalizar(textoBusquedaDebounced)
+    }
+
+    val productosFiltrados = remember(productos, categoriaSeleccionada, textoBuscadoNormalizado) {
+        productos.filter { producto ->
+
+            val cumpleCategoria = categoriaSeleccionada == "Todos" ||
+                producto.categoria == categoriaSeleccionada
+
+            val cumpleTexto = textoBuscadoNormalizado.isBlank() ||
+                normalizar(producto.nombre).contains(textoBuscadoNormalizado) ||
+                normalizar(producto.descripcion).contains(textoBuscadoNormalizado)
+
+            cumpleCategoria && cumpleTexto
         }
     }
 
@@ -187,6 +234,88 @@ fun MyProductsScreen(
                 .background(LineSoft)
         )
 
+        // Buscador + chips de categoría sobre el catálogo propio del artesano — solo
+        // tiene sentido mostrarlos si ya hay algo que buscar.
+        if (!cargando && productos.isNotEmpty()) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp, 12.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Marfil)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = TextoSecundario,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
+                ) {
+
+                    if (textoBusqueda.isEmpty()) {
+
+                        Text(
+                            text = "Buscar en mis publicaciones…",
+                            color = TextoSecundario,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    BasicTextField(
+                        value = textoBusqueda,
+                        onValueChange = { textoBusqueda = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
+                        cursorBrush = SolidColor(Borgona),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                lazyRowItems(categorias) { categoria ->
+
+                    val activo = categoria == categoriaSeleccionada
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (activo) Borgona else Color.White)
+                            .border(1.dp, LineSoft, RoundedCornerShape(20.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { categoriaSeleccionada = categoria }
+                            )
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = categoria,
+                            color = if (activo) Color.White else TextoSecundario,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
         if (cargando) {
 
             Column(
@@ -220,6 +349,22 @@ fun MyProductsScreen(
                 )
             }
 
+        } else if (productosFiltrados.isEmpty()) {
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                Text(
+                    text = "No encontramos publicaciones con ese criterio",
+                    color = TextoSecundario,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+            }
+
         } else {
 
             LazyColumn(
@@ -231,7 +376,7 @@ fun MyProductsScreen(
             ) {
 
                 items(
-                    items = productos,
+                    items = productosFiltrados,
                     key = { producto -> producto.id }
                 ) { producto ->
 

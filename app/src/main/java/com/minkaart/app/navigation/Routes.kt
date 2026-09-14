@@ -43,4 +43,18 @@ object Routes {
     const val ACCOUNT_SETTINGS = "account_settings"
 
     const val RECOGNITION = "recognition"
+
+    // =========================
+    // FASE 5 — Insignia RUAC (administrador)
+    // =========================
+
+    const val ADMIN_REGISTER = "admin_register"
+
+    const val ADMIN_RUAC_LIST = "admin_ruac_list"
+
+    const val ADMIN_RUAC_REVIEW = "admin_ruac_review/{artesanoId}"
+
+    fun adminRuacReviewRoute(artesanoId: String) = "admin_ruac_review/$artesanoId"
+
+    const val REQUEST_RUAC = "request_ruac"
 }

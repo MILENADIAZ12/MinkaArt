@@ -98,6 +98,13 @@ app/src/main/java/com/minkaart/app/
 │   ├── ProductViewModel.kt
 │   └── RegisterViewModel.kt
 └── ui/
+    ├── admin/                     # Rol "administrador" (Fase 5)
+    │   ├── AdminRegisterScreen.kt  # formulario mínimo: correo, contraseña, PIN
+    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes
+    │   └── AdminRuacReviewScreen.kt # aprobar/rechazar una solicitud
+    ├── ruac/                      # Solicitud e insignia de RUAC (Fase 5)
+    │   ├── RequestRuacScreen.kt   # el artesano solicita/re-solicita su RUAC
+    │   └── RuacBadgeScreen.kt     # insignia real (reemplaza el placeholder de RUAC_BADGE)
     ├── components/                # Composables reutilizables del brand kit v2
     │   ├── PatternBackground.kt   # degradado + patrón textil, con blur opcional
     │   ├── GlassCard.kt           # tarjeta "de vidrio esmerilado"
@@ -108,7 +115,8 @@ app/src/main/java/com/minkaart/app/
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
     │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, RUAC, etc.)
     │   ├── ConfianzaDots.kt       # fila de 4 puntos (calidad/confianza), gris si no hay dato
-    │   └── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
+    │   ├── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
+    │   └── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
     ├── home/
     │   ├── HomeArtesanoScreen.kt
     │   └── HomeClienteScreen.kt   # catálogo del cliente: búsqueda, chips, feed, bottom nav
@@ -129,6 +137,10 @@ app/src/main/java/com/minkaart/app/
         ├── Color.kt
         ├── Theme.kt
         └── Type.kt
+└── util/
+    └── Texto.kt                    # normalizar(): quita tildes/mayúsculas para
+                                     # búsqueda de texto; compartida por HomeClienteScreen
+                                     # y MyProductsScreen (Ajustes 2)
 ```
 
 Además, en la raíz del repositorio (fuera de `app/`):
@@ -172,8 +184,12 @@ de `AppNavigation.kt`:
 | `PURCHASE_HISTORY` | `purchase_history` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Historial de compras") |
 | `ACCOUNT_SETTINGS` | `account_settings` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Configuración de la cuenta") |
 | `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
-| `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `PlaceholderScreen` | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC) |
+| `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
 | `RECOGNITION` | `recognition` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
+| `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RegisterScreen` (enlace "¿Eres administrador?") |
+| `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`) |
+| `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
+| `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
 
 ## Modelo de datos
 
@@ -187,23 +203,52 @@ el `uid` de Firebase Auth.
 | `uid` | `String` | |
 | `nombre` | `String` | |
 | `correo` | `String` | |
-| `rol` | `String` | `"cliente"` o `"artesano"` (se compara en minúsculas al hacer login) |
+| `rol` | `String` | `"cliente"`, `"artesano"` o `"administrador"` (Fase 5; se compara en minúsculas al hacer login) |
 | `telefono` | `String` | Solo artesano |
 | `fechaNacimiento` | `String` | Solo artesano, formato `dd/MM/yyyy` |
 | `region` | `String` | Solo artesano |
 | `productosQueVende` | `String` | Solo artesano, texto libre |
 | `categoriasArtesanales` | `List<String>` | Solo artesano; se captura como texto separado por comas y se parte en el registro |
-| `tieneRuac` | `Boolean` | Solo artesano |
-| `numeroRuac` | `String` | Solo si `tieneRuac == true` |
-| `ruacUrl` | `String` | URL de descarga en Storage, solo si `tieneRuac == true` |
+| `ruacEstado` | `String` | Solo artesano. `"no_solicitado"` (default) \| `"pendiente"` \| `"verificado"` \| `"rechazado"` (Fase 5) |
+| `ruacRegistro` | `String?` | Número de registro RUAC declarado por el artesano |
+| `ruacRegion` | `String?` | Región declarada en la solicitud de RUAC (queda `null` si el RUAC vino del registro, ver más abajo) |
+| `ruacTecnica` | `String?` | Técnica declarada en la solicitud de RUAC (mismo caso que `ruacRegion`) |
+| `ruacDocumentoUrl` | `String?` | URL de descarga en Storage del documento/foto de soporte |
+| `ruacSolicitadoEn` | `Timestamp?` | Cuándo se envió la solicitud |
+| `ruacVerificadoEn` | `Timestamp?` | Cuándo un administrador la aprobó |
+| `ruacUltimaValidacion` | `Timestamp?` | Se llena junto con `ruacVerificadoEn` al aprobar |
+| `ruacRevisadoPor` | `String?` | `uid` del administrador que aprobó/rechazó (auditoría) |
 | `bio` | `String?` | Solo artesano; texto corto "Sobre mí" en su Perfil, editable por él mismo |
 | `contactoPublico` | `String?` | Solo artesano; el contacto que decide mostrar públicamente (puede ser distinto de `telefono`). `ProductDetailScreen` lo usa para "Contactar artesano", con `telefono` como respaldo si está vacío |
 
 Desde la Fase 3, cualquier usuario autenticado puede leer el documento de **cualquier**
 usuario (antes solo el propio uid) — necesario para que el cliente vea el perfil del
 artesano dueño de un producto. Efecto secundario aceptado: campos no pensados para
-mostrarse (`correo`, `fechaNacimiento`, `numeroRuac`) también quedan visibles para
+mostrarse (`correo`, `fechaNacimiento`, datos de RUAC) también quedan visibles para
 cualquier usuario con sesión; no existe un documento de "perfil público" separado.
+
+**Nota de migración (Fase 5)**: los campos `ruacEstado`/`ruacRegistro`/`ruacRegion`/
+`ruacTecnica`/`ruacDocumentoUrl`/... **reemplazan por completo** a los campos viejos
+`tieneRuac`/`numeroRuac`/`ruacUrl` (ya no existen en `User.kt`) — no conviven ambos
+esquemas. El proyecto no tiene Cloud Functions ni un script de migración, así que esto es
+retrocompatible solo en el sentido de que ningún documento existente deja de leerse
+(`toObject()` ignora campos que sobran y usa el default de los que faltan), **pero no
+preserva el significado**: cualquier artesano que ya tuviera `tieneRuac == true` antes de
+esta fase queda visto como `ruacEstado == "no_solicitado"` hasta que vuelva a solicitar el
+RUAC desde su perfil con el flujo nuevo. El formulario de registro de artesano sigue
+pidiendo RUAC igual que siempre (número + documento); si el artesano dice que sí tiene,
+queda directo en `ruacEstado = "pendiente"` con `ruacRegistro`/`ruacDocumentoUrl` llenos
+(entra a la misma cola de revisión del administrador) pero `ruacRegion`/`ruacTecnica`
+quedan en `null`, porque el registro no los pide — solo `RequestRuacScreen` (solicitud
+posterior desde el perfil) los captura.
+
+### Firestore — documento `configuracion/adminAccess`
+
+Un único documento, con un campo `pin: String`, que el administrador necesita para
+registrarse (ver más abajo). **No lo crea ninguna pantalla de la app** — hay que crearlo a
+mano en Firebase Console → Firestore Database antes de poder registrar la primera cuenta
+de administrador. Ver la advertencia de seguridad sobre este PIN en "Estado actual y
+pendientes".
 
 ### Firestore — colección `productos/{autoId}`
 
@@ -253,6 +298,25 @@ producto padre dentro de la misma transacción de Firestore, para que nunca qued
 desincronizados. La consulta por `collectionGroup` requiere un índice de campo único con
 alcance de grupo de colección, declarado en `firestore.indexes.json` (`fieldOverrides`, no
 el arreglo `indexes` — ese es solo para índices compuestos).
+
+**Regla de Firestore para la consulta `collectionGroup`**: la regla anidada
+`match /productos/{productId}/likes/{userId}` (en `y`) solo autoriza lecturas/escrituras
+dirigidas a esa ruta exacta o consultas acotadas a la subcolección de un producto puntual
+— **no** autoriza un `collectionGroup("likes")` que recorra los "likes" de todos los
+productos a la vez, que es justo lo que usa `obtenerProductosLikeadosPorUsuario()` para
+`LikesScreen`. Esto causaba `PERMISSION_DENIED` al abrir Likes aunque la regla anidada ya
+permitiera el mismo campo para lecturas directas. La solución es una regla aparte, a nivel
+raíz, con el comodín `{path=**}`:
+
+```
+match /{path=**}/likes/{likeId} {
+  allow read: if request.auth != null;
+}
+```
+
+Las dos reglas conviven sin conflicto (en Firestore, si cualquier `match` aplicable
+concede el permiso, la operación se permite). El índice de `firestore.indexes.json` ya
+era correcto — el `PERMISSION_DENIED` era un problema de reglas, no de índices.
 
 ### Firestore — colección `codigosVerificacion/{correo}`
 
@@ -318,7 +382,15 @@ pueda reutilizarse.
   `HomeArtesanoViewModel.cargarDatosArtesano` → `AuthRepository.obtenerUsuarioActual`) y
   muestra una vista previa de hasta 4 productos; el botón "Ver publicaciones" lleva al
   Panel, que lista todos los productos del artesano con un menú de tres puntos por
-  tarjeta:
+  tarjeta. El Home del artesano tiene su propio bottom nav (`BottomNavBar`, compartido
+  con `HomeClienteScreen`): Inicio (la propia pantalla), **Explorar** → navega a
+  `Routes.HOME_CLIENTE` (el artesano ve el mismo catálogo de todos los artesanos que ve
+  un cliente, con búsqueda, chips, like y detalle — no hay una pantalla de catálogo
+  separada para el rol artesano; dentro de esa pantalla "prestada" el ítem "Perfil" de su
+  bottom nav sigue llevando a `Routes.CLIENT_PROFILE`, límite conocido y no resuelto),
+  RUAC → `Routes.ruacBadgeRoute` (placeholder), Likes → `Routes.LIKES`, Perfil →
+  `Routes.artisanProfileRoute` con el uid del propio artesano (mismo destino que el
+  ícono de perfil del encabezado, que se dejó también por no estorbar):
   - **Editar** navega a `EditProductScreen` (ruta `edit_product/{productId}`), que carga
     el producto con `ProductViewModel.obtenerProductoPorId`, precarga el formulario y,
     al guardar, llama a `actualizarProducto` (mismas validaciones que publicar) y vuelve
@@ -337,8 +409,17 @@ pueda reutilizarse.
     (`ON_RESUME`), para que los cambios de Editar/Publicar se vean sin reiniciar la app —
     Navigation Compose mantiene su `ProductViewModel` vivo en el back stack, así que un
     `LaunchedEffect(Unit)` por sí solo no bastaría.
+  - El Panel tiene su propia barra de búsqueda + chips de categoría (mismo componente
+    visual y misma lógica de filtro — texto y categoría combinados con AND — que usa
+    `HomeClienteScreen`), pero acotada a **`misProductos`**: el artesano busca solo dentro
+    de su propio catálogo, no en el de los demás. La función `normalizar()` (quita
+    tildes/mayúsculas para que la búsqueda no dependa de escribir los acentos exactos) se
+    extrajo a `util/Texto.kt` para que ambas pantallas la reutilicen en vez de tener cada
+    una su propia copia. `HomeArtesanoScreen` en sí (el saludo + vista previa de 4
+    productos) no tiene buscador propio — se decidió ponerlo aquí, en el Panel, por ser la
+    única pantalla del lado artesano con una lista real de productos sobre la que buscar.
 - **Catálogo del cliente** (`HomeClienteScreen` → `HomeClienteViewModel`): barra de
-  búsqueda (el ícono de cámara navega a `Routes.RECOGNITION`, todavía un
+  búsqueda real (el ícono de cámara navega a `Routes.RECOGNITION`, todavía un
   `PlaceholderScreen` — el reconocimiento visual con OpenCV es de otra fase) y chips de
   categoría armados dinámicamente a partir de las categorías distintas presentes en los
   productos cargados, no de una lista fija. El feed (`obtenerTodosLosProductosActivos`)
@@ -349,9 +430,19 @@ pueda reutilizarse.
   `productosLikeados` (`ProductRepository.obtenerProductosLikeadosPorUsuario`, una sola
   consulta con `collectionGroup` en vez de una por tarjeta) para saber si ya se le dio like.
   Tap en una tarjeta navega a `Routes.productDetailRoute(productId)`. El bottom nav
-  reutiliza `Routes.PROFILE` para "Perfil" y navega a `Routes.LIKES` (placeholder) desde
-  "Likes"; "Buscar" no navega a ningún lado, solo hay una barra de búsqueda en esta misma
-  pantalla.
+  (`ui/components/BottomNavBar.kt`, compartido con `HomeArtesanoScreen`) navega a
+  `Routes.CLIENT_PROFILE` desde "Perfil" y a `Routes.LIKES` desde "Likes"; "Buscar" no
+  navega a ningún lado, solo hay una barra de búsqueda en esta misma pantalla.
+
+  **El buscador filtra de verdad** (`titulo`/`descripcion` de cada producto), combinado
+  con **AND** junto al chip de categoría activo — los dos filtros se aplican en memoria
+  sobre los productos ya cargados, sin ninguna consulta nueva a Firestore por cada tecla:
+  Firestore no tiene búsqueda de texto completo nativa y el tamaño del catálogo no
+  justifica un servicio externo (Algolia, extensiones, etc.). El texto escrito se
+  "asienta" 300ms después de la última tecla (`LaunchedEffect(textoBusqueda) { delay(300);
+  ... }`) antes de recalcular el filtro, y tanto el texto escrito como
+  `nombre`/`descripcion` de cada producto se normalizan (sin tildes, minúsculas, vía
+  `java.text.Normalizer` del propio JDK) para que "ceramica" encuentre "Cerámica".
 - **Detalle y contacto** (`ProductDetailScreen` → `ProductDetailViewModel`): encadena dos
   lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
   `obtenerUsuarioPorId`) porque Firestore no tiene joins. Muestra nombre, precio,
@@ -383,6 +474,36 @@ pueda reutilizarse.
   `whereIn(FieldPath.documentId(), ...)`) para traerlos de una vez en vez de una lectura
   por producto. "Cerrar sesión" llama a `AuthRepository.cerrarSesion()` y navega a
   `Routes.WELCOME` limpiando todo el back stack (`popUpTo(0) { inclusive = true }`).
+- **Insignia RUAC — solicitud y verificación (Fase 5)**: en su propio perfil, un artesano
+  sin RUAC verificado ve "Agregar RUAC" (o "Volver a solicitar RUAC" si fue rechazado);
+  abre `RequestRuacScreen` (número de registro, región, técnica y un documento/foto
+  seleccionado con `OpenDocument()` — el mismo selector que ya usaba el RUAC del registro,
+  no `ImageUploadBox`, porque el documento puede ser PDF o imagen). Al enviar,
+  `AuthRepository.enviarSolicitudRuac` sube el archivo a `ruac/{uid}/documento_ruac` y deja
+  `ruacEstado = "pendiente"`; mientras está así, el perfil muestra un chip no clickeable
+  "RUAC en revisión" en vez del botón. `ArtisanProfileScreen` se refresca solo al volver a
+  primer plano (mismo patrón `ON_RESUME` que el Panel de Publicaciones), así que el nuevo
+  estado se ve sin reabrir la app.
+
+  Un administrador (rol nuevo, ver más abajo) entra directo a `AdminRuacListScreen` al
+  iniciar sesión — es su único destino, no tiene Home propio. Ahí ve todos los artesanos
+  con `ruacEstado == "pendiente"` (una sola consulta de igualdad, ordenada por fecha de
+  solicitud en memoria para no depender de un índice compuesto — mismo criterio que
+  `obtenerTodosLosProductosActivos`); tap en una fila abre `AdminRuacReviewScreen`, con los
+  datos declarados y el documento de soporte. **Aprobar** deja `ruacEstado = "verificado"`
+  y llena `ruacVerificadoEn`/`ruacUltimaValidacion`/`ruacRevisadoPor`; **Rechazar** deja
+  `ruacEstado = "rechazado"` (el artesano puede volver a solicitar). Ninguno de los dos
+  pide confirmación aparte — mismo criterio que "Pausar/Activar publicación": cambia un
+  estado, no borra nada, se puede volver a revisar. Con `ruacEstado == "verificado"`, el
+  chip "Con registro RUAC" se enciende en `ArtisanProfileScreen` y en la fila del artesano
+  dentro de `ProductDetailScreen`, y `RuacBadgeScreen` (antes un placeholder) muestra los
+  datos reales; si alguien entra a esa ruta sin estar verificado, ve un estado vacío en vez
+  de datos incompletos.
+
+  **Registro de administrador**: desde un enlace discreto al final de `RegisterScreen`
+  ("¿Eres administrador?"), `AdminRegisterScreen` pide correo, contraseña y un PIN. No pasa
+  por el código de verificación de correo de 6 dígitos (a diferencia de cliente/artesano) —
+  ver la advertencia de seguridad más abajo para la razón exacta y el trade-off aceptado.
 
 ## Diseño y marca
 
@@ -496,6 +617,18 @@ Detalle de la configuración en `functions/SETUP.md`.
   el código (`RegisterViewModel.iniciarRegistro` + `confirmarCodigoDeVerificacion`,
   `AuthRepository.enviarCodigoVerificacion` / `verificarCodigo` sobre las Cloud
   Functions `enviarCodigoVerificacion` / `verificarCodigo`).
+- El artesano puede explorar el catálogo general (mismo feed que ve un cliente) desde
+  "Explorar" en su propio bottom nav, y busca dentro de su propio catálogo con chips de
+  categoría + texto en el Panel de Publicaciones — misma lógica de filtro que
+  `HomeClienteScreen`, compartida vía `util/Texto.kt` (Ajustes 2). `LikesScreen` ya abre
+  sin `PERMISSION_DENIED`: hacía falta una regla de Firestore aparte para la consulta
+  `collectionGroup("likes")` (ver la colección `productos/{autoId}/likes/{uid}` más
+  arriba para el detalle exacto).
+- El RUAC ahora sí se verifica de verdad (Fase 5): solicitud del artesano
+  (`RequestRuacScreen`), cola de revisión y aprobación/rechazo por un tercer rol,
+  `"administrador"` (`AdminRuacListScreen`/`AdminRuacReviewScreen`), e insignia real
+  (`RuacBadgeScreen`) — ver "Insignia RUAC" en Flujos principales y la nota de migración
+  en el modelo de datos de `usuarios`.
 
 **Pendiente / placeholder**
 - `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
@@ -532,8 +665,19 @@ Detalle de la configuración en `functions/SETUP.md`.
 - Las reglas de Firestore que abren la lectura de `usuarios/{uid}` a cualquier usuario
   autenticado (ver Modelo de datos) siguen con el mismo trade-off de privacidad aceptado
   en la Fase 3.
-- El RUAC se recibe y se guarda, pero no hay ninguna verificación real del documento ni
-  del número.
+- **Advertencia de seguridad del PIN de administrador (Fase 5)**: el proyecto no usa
+  Cloud Functions, así que `AuthRepository.registrarAdministrador` valida el PIN
+  comparándolo del lado del cliente contra `configuracion/adminAccess.pin` en Firestore.
+  Es razonable para el alcance de esta tesis/MVP, pero **no es a prueba de un atacante
+  decidido**: la regla que permite leer ese documento (`allow get: if request.auth !=
+  null`) lo deja legible por cualquier usuario autenticado, no solo durante el registro de
+  administrador — alguien con conocimientos técnicos podría leer el PIN directamente o
+  manipular la app para saltarse la comparación. La forma "correcta" sería validar el PIN
+  con una Cloud Function (que nunca expone el secreto al cliente), pero el proyecto no las
+  usa para esto todavía. Tampoco hay ninguna migración de los `tieneRuac == true` que ya
+  existieran antes de esta fase (ver la nota de migración en el modelo de `usuarios`).
+  El documento `configuracion/adminAccess` no lo crea ninguna pantalla — hay que crearlo a
+  mano en Firebase Console antes de poder registrar la primera cuenta de administrador.
 - Un correo que ya tiene cuenta en Firebase Auth solo se detecta al final del registro,
   al llamar a `createUserWithEmailAndPassword` después de verificar el código (la Cloud
   Function `enviarCodigoVerificacion` no comprueba si el correo ya está registrado).

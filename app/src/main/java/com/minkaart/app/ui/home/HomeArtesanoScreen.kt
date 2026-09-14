@@ -24,8 +24,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,8 +46,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import android.widget.Toast
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
+import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.BottomNavBar
+import com.minkaart2.app.ui.components.BottomNavItemData
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.viewModel.HomeArtesanoViewModel
@@ -56,6 +65,7 @@ private val Marfil = Color(0xFFF2EDE6)
 
 @Composable
 fun HomeArtesanoScreen(
+    navController: NavController,
     onPublicarClick: () -> Unit,
     onMisPublicacionesClick: () -> Unit,
     onPerfilClick: () -> Unit
@@ -141,6 +151,7 @@ fun HomeArtesanoScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .padding(horizontal = 18.dp)
         ) {
 
@@ -240,5 +251,44 @@ fun HomeArtesanoScreen(
                 }
             }
         }
+
+        val uidActual = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+        BottomNavBar(
+            items = listOf(
+                BottomNavItemData(
+                    icon = Icons.Filled.Home,
+                    label = "Inicio",
+                    activo = true,
+                    onClick = {}
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Search,
+                    label = "Explorar",
+                    activo = false,
+                    onClick = { navController.navigate(Routes.HOME_CLIENTE) }
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.CheckCircle,
+                    label = "RUAC",
+                    activo = false,
+                    onClick = {
+                        navController.navigate(Routes.ruacBadgeRoute(uidActual))
+                    }
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Favorite,
+                    label = "Likes",
+                    activo = false,
+                    onClick = { navController.navigate(Routes.LIKES) }
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Person,
+                    label = "Perfil",
+                    activo = false,
+                    onClick = onPerfilClick
+                )
+            )
+        )
     }
 }

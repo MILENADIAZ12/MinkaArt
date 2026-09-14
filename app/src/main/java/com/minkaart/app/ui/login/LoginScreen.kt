@@ -252,6 +252,20 @@ fun LoginScreen(
                                         }
                                     }
 
+                                    "administrador" -> {
+
+                                        // El administrador no tiene Home propio más allá
+                                        // de esto — solo aprueba/rechaza RUAC (Fase 5).
+                                        navController.navigate(
+                                            Routes.ADMIN_RUAC_LIST
+                                        ) {
+
+                                            popUpTo(Routes.LOGIN) {
+                                                inclusive = true
+                                            }
+                                        }
+                                    }
+
                                     else -> {
 
                                         Toast.makeText(

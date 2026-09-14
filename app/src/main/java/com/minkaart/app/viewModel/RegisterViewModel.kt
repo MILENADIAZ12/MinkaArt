@@ -2,6 +2,7 @@ package com.minkaart2.app.viewmodel
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -378,6 +379,12 @@ class RegisterViewModel : ViewModel() {
         onError: (String) -> Unit
     ) {
 
+        // El registro sigue pidiendo RUAC igual que antes (Fase 5, Decisión 2), pero ahora
+        // escribe directo en los campos nuevos de solicitud en vez de tieneRuac/numeroRuac/
+        // ruacUrl (ya no existen en el modelo): un artesano que marque que sí tiene RUAC
+        // entra a la misma cola de revisión del administrador que una solicitud hecha
+        // después desde su perfil. ruacRegion/ruacTecnica quedan sin llenar porque el
+        // registro no los pide.
         val user = User(
             uid = uid,
             nombre = datos.nombre,
@@ -388,9 +395,10 @@ class RegisterViewModel : ViewModel() {
             region = datos.region,
             productosQueVende = datos.productosQueVende,
             categoriasArtesanales = datos.categoriasArtesanales,
-            tieneRuac = datos.tieneRuac,
-            numeroRuac = datos.numeroRuac,
-            ruacUrl = ruacUrl
+            ruacEstado = if (datos.tieneRuac) "pendiente" else "no_solicitado",
+            ruacRegistro = if (datos.tieneRuac) datos.numeroRuac else null,
+            ruacDocumentoUrl = if (datos.tieneRuac) ruacUrl else null,
+            ruacSolicitadoEn = if (datos.tieneRuac) Timestamp.now() else null
         )
 
         db.collection("usuarios")

@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.GlassCard
 import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
@@ -68,7 +71,7 @@ private val Marfil = Color(0xFFF2EDE6)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegisterScreen() {
+fun RegisterScreen(navController: NavController) {
 
     // =========================
     // DATOS GENERALES
@@ -699,6 +702,18 @@ fun RegisterScreen() {
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Entrada discreta al registro de administrador (Fase 5) — no es un
+                // tercer botón de rol junto a Artesano/Cliente, solo un texto pequeño al
+                // final, como pide el encargo.
+                Text(
+                    text = "¿Eres administrador? Regístrate aquí",
+                    color = Marfil.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.clickable {
+                        navController.navigate(Routes.ADMIN_REGISTER)
+                    }
+                )
             }
         }
     }

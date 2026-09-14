@@ -7,6 +7,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
+import com.minkaart2.app.ui.admin.AdminRegisterScreen
+import com.minkaart2.app.ui.admin.AdminRuacListScreen
+import com.minkaart2.app.ui.admin.AdminRuacReviewScreen
 import com.minkaart2.app.ui.components.PlaceholderScreen
 import com.minkaart2.app.ui.home.HomeArtesanoScreen
 import com.minkaart2.app.ui.home.HomeClienteScreen
@@ -19,6 +22,8 @@ import com.minkaart2.app.ui.profile.ProfileScreen
 import com.minkaart2.app.ui.publication.EditProductScreen
 import com.minkaart2.app.ui.publication.PublicationScreen
 import com.minkaart2.app.ui.register.RegisterScreen
+import com.minkaart2.app.ui.ruac.RequestRuacScreen
+import com.minkaart2.app.ui.ruac.RuacBadgeScreen
 import com.minkaart2.app.ui.welcome.WelcomeScreen
 import com.minkaart2.app.ui.publication.MyProductsScreen
 
@@ -41,7 +46,7 @@ fun AppNavigation() {
         }
 
         composable(Routes.REGISTER) {
-            RegisterScreen()
+            RegisterScreen(navController)
         }
 
         composable(Routes.HOME_CLIENTE) {
@@ -51,6 +56,7 @@ fun AppNavigation() {
         composable(Routes.HOME_ARTESANO) {
 
             HomeArtesanoScreen(
+                navController = navController,
                 onPublicarClick = {
                     navController.navigate(Routes.PUBLICATION)
                 },
@@ -162,12 +168,55 @@ fun AppNavigation() {
             arguments = listOf(
                 navArgument("artesanoId") { type = NavType.StringType }
             )
-        ) {
-            PlaceholderScreen(titulo = "Insignia RUAC del artesano")
+        ) { backStackEntry ->
+
+            val artesanoId = backStackEntry.arguments?.getString("artesanoId")
+
+            if (artesanoId != null) {
+
+                RuacBadgeScreen(
+                    artesanoId = artesanoId,
+                    navController = navController
+                )
+            }
         }
 
         composable(Routes.PROFILE) {
             ProfileScreen()
+        }
+
+        // =========================
+        // FASE 5 — Insignia RUAC (administrador)
+        // =========================
+
+        composable(Routes.ADMIN_REGISTER) {
+            AdminRegisterScreen(navController)
+        }
+
+        composable(Routes.ADMIN_RUAC_LIST) {
+            AdminRuacListScreen(navController)
+        }
+
+        composable(
+            route = Routes.ADMIN_RUAC_REVIEW,
+            arguments = listOf(
+                navArgument("artesanoId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val artesanoId = backStackEntry.arguments?.getString("artesanoId")
+
+            if (artesanoId != null) {
+
+                AdminRuacReviewScreen(
+                    artesanoId = artesanoId,
+                    navController = navController
+                )
+            }
+        }
+
+        composable(Routes.REQUEST_RUAC) {
+            RequestRuacScreen(navController)
         }
     }
 }

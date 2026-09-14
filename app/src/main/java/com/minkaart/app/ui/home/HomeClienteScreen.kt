@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
@@ -43,15 +44,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.BottomNavBar
+import com.minkaart2.app.ui.components.BottomNavItemData
 import com.minkaart2.app.ui.components.ProductoFeedCard
 import com.minkaart2.app.viewModel.HomeClienteViewModel
+import com.minkaart2.app.util.normalizar
+import kotlinx.coroutines.delay
 
 private val Guinda = Color(0xFF3B0F1A)
 private val Borgona = Color(0xFF66172E)
@@ -72,6 +77,16 @@ fun HomeClienteScreen(navController: NavController) {
 
     var categoriaSeleccionada by remember { mutableStateOf("Todos") }
 
+    // Texto tal como se escribe, y su versión "asentada" 300ms después de la última
+    // tecla — evita recalcular el filtro en cada pulsación si el catálogo crece.
+    var textoBusqueda by remember { mutableStateOf("") }
+    var textoBusquedaDebounced by remember { mutableStateOf("") }
+
+    LaunchedEffect(textoBusqueda) {
+        delay(300)
+        textoBusquedaDebounced = textoBusqueda
+    }
+
     LaunchedEffect(Unit) {
 
         viewModel.cargarFeed(
@@ -89,10 +104,24 @@ fun HomeClienteScreen(navController: NavController) {
             .sorted()
     }
 
-    val productosFiltrados = if (categoriaSeleccionada == "Todos") {
-        productos
-    } else {
-        productos.filter { it.categoria == categoriaSeleccionada }
+    val textoBuscadoNormalizado = remember(textoBusquedaDebounced) {
+        normalizar(textoBusquedaDebounced)
+    }
+
+    // Categoría y texto se combinan con AND: si hay texto Y una categoría distinta de
+    // "Todos", el producto tiene que cumplir las dos condiciones a la vez.
+    val productosFiltrados = remember(productos, categoriaSeleccionada, textoBuscadoNormalizado) {
+        productos.filter { producto ->
+
+            val cumpleCategoria = categoriaSeleccionada == "Todos" ||
+                producto.categoria == categoriaSeleccionada
+
+            val cumpleTexto = textoBuscadoNormalizado.isBlank() ||
+                normalizar(producto.nombre).contains(textoBuscadoNormalizado) ||
+                normalizar(producto.descripcion).contains(textoBuscadoNormalizado)
+
+            cumpleCategoria && cumpleTexto
+        }
     }
 
     Column(
@@ -120,14 +149,30 @@ fun HomeClienteScreen(navController: NavController) {
                 modifier = Modifier.size(16.dp)
             )
 
-            Text(
-                text = "Buscar artesanía, técnica, región…",
-                color = TextoSecundario,
-                style = MaterialTheme.typography.bodySmall,
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 8.dp)
-            )
+            ) {
+
+                if (textoBusqueda.isEmpty()) {
+
+                    Text(
+                        text = "Buscar artesanía, técnica, región…",
+                        color = TextoSecundario,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                BasicTextField(
+                    value = textoBusqueda,
+                    onValueChange = { textoBusqueda = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
+                    cursorBrush = SolidColor(Borgona),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -151,6 +196,8 @@ fun HomeClienteScreen(navController: NavController) {
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Chips de categoría
         LazyRow(
@@ -189,17 +236,21 @@ fun HomeClienteScreen(navController: NavController) {
         if (cargando) {
 
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 CircularProgressIndicator(color = Borgona)
             }
 
-        } else if (productosFiltrados.isEmpty()) {
+        } else if (productos.isEmpty()) {
 
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -207,6 +258,23 @@ fun HomeClienteScreen(navController: NavController) {
                     text = "Todavía no hay artesanías publicadas",
                     color = TextoSecundario,
                     style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+        } else if (productosFiltrados.isEmpty()) {
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "No encontramos artesanías con ese criterio",
+                    color = TextoSecundario,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 32.dp)
                 )
             }
 
@@ -250,77 +318,33 @@ fun HomeClienteScreen(navController: NavController) {
             }
         }
 
-        // Bottom nav
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-                .padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-
-            BottomNavItem(
-                icon = Icons.Filled.Home,
-                label = "Inicio",
-                activo = true,
-                onClick = {}
+        BottomNavBar(
+            items = listOf(
+                BottomNavItemData(
+                    icon = Icons.Filled.Home,
+                    label = "Inicio",
+                    activo = true,
+                    onClick = {}
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Search,
+                    label = "Buscar",
+                    activo = false,
+                    onClick = { /* la barra de búsqueda ya está visible en esta misma pantalla */ }
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Favorite,
+                    label = "Likes",
+                    activo = false,
+                    onClick = { navController.navigate(Routes.LIKES) }
+                ),
+                BottomNavItemData(
+                    icon = Icons.Filled.Person,
+                    label = "Perfil",
+                    activo = false,
+                    onClick = { navController.navigate(Routes.CLIENT_PROFILE) }
+                )
             )
-
-            BottomNavItem(
-                icon = Icons.Filled.Search,
-                label = "Buscar",
-                activo = false,
-                onClick = { /* la barra de búsqueda ya está visible en esta misma pantalla */ }
-            )
-
-            BottomNavItem(
-                icon = Icons.Filled.Favorite,
-                label = "Likes",
-                activo = false,
-                onClick = { navController.navigate(Routes.LIKES) }
-            )
-
-            BottomNavItem(
-                icon = Icons.Filled.Person,
-                label = "Perfil",
-                activo = false,
-                onClick = { navController.navigate(Routes.CLIENT_PROFILE) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun BottomNavItem(
-    icon: ImageVector,
-    label: String,
-    activo: Boolean,
-    onClick: () -> Unit
-) {
-
-    Column(
-        modifier = Modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (activo) Borgona else Color(0xFFC9B8BD),
-            modifier = Modifier.size(20.dp)
-        )
-
-        Text(
-            text = label,
-            color = if (activo) Borgona else Color(0xFFC9B8BD),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
