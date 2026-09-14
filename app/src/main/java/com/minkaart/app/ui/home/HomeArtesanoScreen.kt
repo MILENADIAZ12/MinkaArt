@@ -11,14 +11,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,7 +57,8 @@ private val Marfil = Color(0xFFF2EDE6)
 @Composable
 fun HomeArtesanoScreen(
     onPublicarClick: () -> Unit,
-    onMisPublicacionesClick: () -> Unit
+    onMisPublicacionesClick: () -> Unit,
+    onPerfilClick: () -> Unit
 ) {
 
     val homeViewModel: HomeArtesanoViewModel = viewModel()
@@ -76,7 +85,7 @@ fun HomeArtesanoScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Marfil)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
 
         // Encabezado
@@ -85,24 +94,48 @@ fun HomeArtesanoScreen(
                 .fillMaxWidth()
                 .background(Marfil)
                 .padding(18.dp),
-            horizontalArrangement = Arrangement.Start
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                Box(
+                    modifier = Modifier
+                        .height(28.dp)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Guinda)
+                )
+
+                Text(
+                    text = "Minka Art",
+                    color = Guinda,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+            }
 
             Box(
                 modifier = Modifier
-                    .height(28.dp)
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Guinda)
-            )
-
-            Text(
-                text = "Minka Art",
-                color = Guinda,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 10.dp)
-            )
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(AzulClaro)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onPerfilClick
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Person,
+                    contentDescription = "Mi perfil",
+                    tint = Guinda,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
 
         Column(

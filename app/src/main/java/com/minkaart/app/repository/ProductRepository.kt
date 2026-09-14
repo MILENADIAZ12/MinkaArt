@@ -2,6 +2,7 @@ package com.minkaart2.app.repository
 
 import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -131,7 +132,23 @@ class ProductRepository {
             return
         }
 
-        val artesanoId = usuarioActual.uid
+        obtenerProductosPorArtesano(
+            artesanoId = usuarioActual.uid,
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
+    /**
+     * Misma consulta que ya hacía `obtenerMisProductos`, generalizada a un artesanoId
+     * arbitrario — la usa el Perfil del artesano para traer los productos de cualquier
+     * artesano, no solo los del usuario autenticado.
+     */
+    fun obtenerProductosPorArtesano(
+        artesanoId: String,
+        onSuccess: (List<Product>) -> Unit,
+        onError: (String) -> Unit
+    ) {
 
         db.collection("productos")
             .whereEqualTo("artesanoId", artesanoId)
@@ -147,7 +164,7 @@ class ProductRepository {
             .addOnFailureListener { error ->
 
                 onError(
-                    error.message ?: "Error al consultar tus publicaciones"
+                    error.message ?: "Error al consultar las publicaciones"
                 )
             }
     }
@@ -453,5 +470,57 @@ class ProductRepository {
                     error.message ?: "Error al consultar tus likes"
                 )
             }
+    }
+
+    /**
+     * Trae varios productos por id en bloques de 30 (el máximo que admite
+     * `whereIn(FieldPath.documentId(), ...)` por consulta), en vez de una lectura por
+     * producto. La usa la pantalla de Likes para traer los productos likeados de una vez.
+     */
+    fun obtenerProductosPorIds(
+        ids: List<String>,
+        onSuccess: (List<Product>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        if (ids.isEmpty()) {
+            onSuccess(emptyList())
+            return
+        }
+
+        val bloques = ids.chunked(30)
+        val productosEncontrados = mutableListOf<Product>()
+        var bloquesPendientes = bloques.size
+        var yaFalló = false
+
+        bloques.forEach { bloque ->
+
+            db.collection("productos")
+                .whereIn(FieldPath.documentId(), bloque)
+                .get()
+                .addOnSuccessListener { resultado ->
+
+                    if (yaFalló) return@addOnSuccessListener
+
+                    productosEncontrados.addAll(
+                        resultado.documents.mapNotNull { documento ->
+                            documento.toObject(Product::class.java)
+                        }
+                    )
+
+                    bloquesPendientes--
+
+                    if (bloquesPendientes == 0) {
+                        onSuccess(productosEncontrados)
+                    }
+                }
+                .addOnFailureListener { error ->
+
+                    if (!yaFalló) {
+                        yaFalló = true
+                        onError(error.message ?: "Error al consultar tus likes")
+                    }
+                }
+        }
     }
 }

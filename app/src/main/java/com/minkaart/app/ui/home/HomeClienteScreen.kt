@@ -10,24 +10,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyRowItems
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -46,17 +44,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
-import com.minkaart2.app.data.model.Product
 import com.minkaart2.app.navigation.Routes
-import com.minkaart2.app.ui.components.ConfianzaDots
+import com.minkaart2.app.ui.components.ProductoFeedCard
 import com.minkaart2.app.viewModel.HomeClienteViewModel
 
 private val Guinda = Color(0xFF3B0F1A)
@@ -105,7 +99,7 @@ fun HomeClienteScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(Marfil)
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
 
         // Barra de búsqueda
@@ -245,6 +239,11 @@ fun HomeClienteScreen(navController: NavController) {
                                     Toast.makeText(context, mensaje, Toast.LENGTH_SHORT).show()
                                 }
                             )
+                        },
+                        onArtesanoClick = {
+                            navController.navigate(
+                                Routes.artisanProfileRoute(producto.artesanoId)
+                            )
                         }
                     )
                 }
@@ -285,7 +284,7 @@ fun HomeClienteScreen(navController: NavController) {
                 icon = Icons.Filled.Person,
                 label = "Perfil",
                 activo = false,
-                onClick = { navController.navigate(Routes.PROFILE) }
+                onClick = { navController.navigate(Routes.CLIENT_PROFILE) }
             )
         }
     }
@@ -323,94 +322,5 @@ private fun BottomNavItem(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal
         )
-    }
-}
-
-@Composable
-private fun ProductoFeedCard(
-    producto: Product,
-    nombreArtesano: String?,
-    leGustaAlUsuario: Boolean,
-    onClick: () -> Unit,
-    onLikeClick: () -> Unit
-) {
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-    ) {
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.1f)
-                .background(Marfil)
-        ) {
-
-            if (producto.imagenes.isNotEmpty()) {
-
-                AsyncImage(
-                    model = producto.imagenes.first(),
-                    contentDescription = producto.nombre,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.92f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onLikeClick
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (leGustaAlUsuario) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = "Me gusta",
-                    tint = Borgona,
-                    modifier = Modifier.size(12.dp)
-                )
-            }
-        }
-
-        Column(modifier = Modifier.padding(8.dp)) {
-
-            Text(
-                text = producto.nombre,
-                color = Guinda,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                text = nombreArtesano ?: "",
-                color = TextoSecundario,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            ConfianzaDots(
-                valor = producto.confianzaPromedio,
-                color = AzulAcero
-            )
-        }
     }
 }

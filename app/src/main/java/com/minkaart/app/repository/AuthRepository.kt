@@ -140,6 +140,35 @@ class AuthRepository {
             }
     }
 
+    /**
+     * Actualización parcial genérica de campos del propio usuario — la usan tanto la
+     * edición de "nombre" (cliente) como la de "bio"/"contactoPublico" (artesano), en vez
+     * de tener una función de actualización distinta por cada campo.
+     */
+    fun actualizarCamposUsuario(
+        uid: String,
+        campos: Map<String, Any>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        firestore.collection("usuarios")
+            .document(uid)
+            .update(campos)
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener {
+                onError(
+                    it.message ?: "Error al actualizar los datos del usuario"
+                )
+            }
+    }
+
+    fun cerrarSesion() {
+        auth.signOut()
+    }
+
     fun recuperarContraseña(
         correo: String,
         onSuccess: () -> Unit,

@@ -32,5 +32,15 @@ object Routes {
 
     fun ruacBadgeRoute(artesanoId: String) = "ruac_badge/$artesanoId"
 
+    const val ARTISAN_PROFILE = "artisan_profile/{artesanoId}"
+
+    fun artisanProfileRoute(artesanoId: String) = "artisan_profile/$artesanoId"
+
+    const val CLIENT_PROFILE = "client_profile"
+
+    const val PURCHASE_HISTORY = "purchase_history"
+
+    const val ACCOUNT_SETTINGS = "account_settings"
+
     const val RECOGNITION = "recognition"
 }

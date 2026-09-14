@@ -19,6 +19,10 @@ data class User(
     // Registro RUAC
     val tieneRuac: Boolean = false,
     val numeroRuac: String = "",
-    val ruacUrl: String = ""
+    val ruacUrl: String = "",
+
+    // Perfil público del artesano (Fase 4)
+    val bio: String? = null,
+    val contactoPublico: String? = null
 
 )

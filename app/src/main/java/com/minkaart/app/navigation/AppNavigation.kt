@@ -6,11 +6,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
 import com.minkaart2.app.ui.components.PlaceholderScreen
 import com.minkaart2.app.ui.home.HomeArtesanoScreen
 import com.minkaart2.app.ui.home.HomeClienteScreen
 import com.minkaart2.app.ui.login.LoginScreen
 import com.minkaart2.app.ui.product.ProductDetailScreen
+import com.minkaart2.app.ui.profile.ArtisanProfileScreen
+import com.minkaart2.app.ui.profile.ClientProfileScreen
+import com.minkaart2.app.ui.profile.LikesScreen
 import com.minkaart2.app.ui.profile.ProfileScreen
 import com.minkaart2.app.ui.publication.EditProductScreen
 import com.minkaart2.app.ui.publication.PublicationScreen
@@ -52,6 +56,14 @@ fun AppNavigation() {
                 },
                 onMisPublicacionesClick = {
                     navController.navigate(Routes.MY_PRODUCTS)
+                },
+                onPerfilClick = {
+
+                    val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+                    if (uid != null) {
+                        navController.navigate(Routes.artisanProfileRoute(uid))
+                    }
                 }
             )
         }
@@ -107,12 +119,42 @@ fun AppNavigation() {
             }
         }
 
-        composable(Routes.RECOGNITION) {
-            PlaceholderScreen(titulo = "Reconocimiento visual por cámara")
+        composable(
+            route = Routes.ARTISAN_PROFILE,
+            arguments = listOf(
+                navArgument("artesanoId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val artesanoId = backStackEntry.arguments?.getString("artesanoId")
+
+            if (artesanoId != null) {
+
+                ArtisanProfileScreen(
+                    artesanoId = artesanoId,
+                    navController = navController
+                )
+            }
+        }
+
+        composable(Routes.CLIENT_PROFILE) {
+            ClientProfileScreen(navController)
         }
 
         composable(Routes.LIKES) {
-            PlaceholderScreen(titulo = "Tus artesanías con like")
+            LikesScreen(navController)
+        }
+
+        composable(Routes.PURCHASE_HISTORY) {
+            PlaceholderScreen(titulo = "Historial de compras")
+        }
+
+        composable(Routes.ACCOUNT_SETTINGS) {
+            PlaceholderScreen(titulo = "Configuración de la cuenta")
+        }
+
+        composable(Routes.RECOGNITION) {
+            PlaceholderScreen(titulo = "Reconocimiento visual por cámara")
         }
 
         composable(

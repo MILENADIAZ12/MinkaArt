@@ -87,10 +87,13 @@ app/src/main/java/com/minkaart/app/
 │   ├── AppNavigation.kt      # NavHost con todas las rutas registradas
 │   └── Routes.kt             # constantes de ruta (String)
 ├── repository/
-│   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos del usuario actual
-│   └── ProductRepository.kt  # guardar/editar/eliminar producto (con/sin imagen), listar "mis productos", consultar uno por id
+│   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos de usuarios, actualizar campos, cerrar sesión
+│   └── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
 ├── viewModel/                 # ¡ojo con mayúscula/minúscula, ver más abajo!
+│   ├── ArtisanProfileViewModel.kt
+│   ├── ClientProfileViewModel.kt
 │   ├── HomeArtesanoViewModel.kt
+│   ├── LikesViewModel.kt
 │   ├── LoginViewModel.kt
 │   ├── ProductViewModel.kt
 │   └── RegisterViewModel.kt
@@ -103,14 +106,19 @@ app/src/main/java/com/minkaart/app/
     │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills
     │   ├── ImageUploadBox.kt      # caja de selección/preview de imagen (Publicar/Editar)
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
-    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, likes, RUAC)
-    │   └── ConfianzaDots.kt       # fila de 4 puntos (calidad/confianza), gris si no hay dato
+    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, RUAC, etc.)
+    │   ├── ConfianzaDots.kt       # fila de 4 puntos (calidad/confianza), gris si no hay dato
+    │   └── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
     ├── home/
     │   ├── HomeArtesanoScreen.kt
     │   └── HomeClienteScreen.kt   # catálogo del cliente: búsqueda, chips, feed, bottom nav
     ├── login/LoginScreen.kt
     ├── product/ProductDetailScreen.kt  # detalle, artesano, calidad/confianza, contacto WhatsApp
-    ├── profile/ProfileScreen.kt   # placeholder
+    ├── profile/
+    │   ├── ArtisanProfileScreen.kt  # perfil público del artesano, editable por su dueño
+    │   ├── ClientProfileScreen.kt   # menú del cliente: info básica, likes, cerrar sesión
+    │   ├── LikesScreen.kt           # lista de productos con like del usuario actual
+    │   └── ProfileScreen.kt         # placeholder genérico, sin usar desde esta fase
     ├── publication/
     │   ├── MyProductsScreen.kt    # "Panel de Publicaciones": lista, editar/eliminar (menú ⋮)
     │   ├── PublicationScreen.kt
@@ -158,9 +166,13 @@ de `AppNavigation.kt`:
 | `PUBLICATION` | `publication` | `PublicationScreen` | Sí | `HomeArtesanoScreen`, `MyProductsScreen` (chip "Nueva") |
 | `EDIT_PRODUCT` | `edit_product/{productId}` | `EditProductScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → Editar) |
 | `PRODUCT_DETAIL` | `product_detail/{productId}` | `ProductDetailScreen` | Sí, con argumento de ruta | `HomeClienteScreen` (tap en una tarjeta del feed) |
-| `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | `HomeClienteScreen` (bottom nav "Perfil") |
-| `LIKES` | `likes` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (bottom nav "Likes") |
-| `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `PlaceholderScreen` | Sí, con argumento de ruta | `ProductDetailScreen` (tap en la fila del artesano) |
+| `ARTISAN_PROFILE` | `artisan_profile/{artesanoId}` | `ArtisanProfileScreen` | Sí, con argumento de ruta | `HomeClienteScreen` (nombre del artesano en una tarjeta), `ProductDetailScreen` (fila del artesano), `HomeArtesanoScreen` (ícono de perfil, propio) |
+| `CLIENT_PROFILE` | `client_profile` | `ClientProfileScreen` | Sí | `HomeClienteScreen` (bottom nav "Perfil") |
+| `LIKES` | `likes` | `LikesScreen` | Sí | `HomeClienteScreen` (bottom nav "Likes"), `ClientProfileScreen` ("Mis likes") |
+| `PURCHASE_HISTORY` | `purchase_history` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Historial de compras") |
+| `ACCOUNT_SETTINGS` | `account_settings` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Configuración de la cuenta") |
+| `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
+| `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `PlaceholderScreen` | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC) |
 | `RECOGNITION` | `recognition` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
 
 ## Modelo de datos
@@ -184,6 +196,14 @@ el `uid` de Firebase Auth.
 | `tieneRuac` | `Boolean` | Solo artesano |
 | `numeroRuac` | `String` | Solo si `tieneRuac == true` |
 | `ruacUrl` | `String` | URL de descarga en Storage, solo si `tieneRuac == true` |
+| `bio` | `String?` | Solo artesano; texto corto "Sobre mí" en su Perfil, editable por él mismo |
+| `contactoPublico` | `String?` | Solo artesano; el contacto que decide mostrar públicamente (puede ser distinto de `telefono`). `ProductDetailScreen` lo usa para "Contactar artesano", con `telefono` como respaldo si está vacío |
+
+Desde la Fase 3, cualquier usuario autenticado puede leer el documento de **cualquier**
+usuario (antes solo el propio uid) — necesario para que el cliente vea el perfil del
+artesano dueño de un producto. Efecto secundario aceptado: campos no pensados para
+mostrarse (`correo`, `fechaNacimiento`, `numeroRuac`) también quedan visibles para
+cualquier usuario con sesión; no existe un documento de "perfil público" separado.
 
 ### Firestore — colección `productos/{autoId}`
 
@@ -336,11 +356,33 @@ pueda reutilizarse.
   lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
   `obtenerUsuarioPorId`) porque Firestore no tiene joins. Muestra nombre, precio,
   categoría, descripción, historia y región del producto, y una fila con el artesano
-  (nombre, teléfono, insignia RUAC en miniatura si `tieneRuac`) que navega a
-  `Routes.ruacBadgeRoute(artesanoId)` (placeholder). Dos filas de `ConfianzaDots` para
-  calidad y confianza. El botón "Contactar artesano" limpia el teléfono a solo dígitos y
-  abre `https://wa.me/<numero>?text=<mensaje>` con un intent `ACTION_VIEW`; si no hay
-  ninguna app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual.
+  (nombre, contacto, insignia RUAC en miniatura si `tieneRuac`) que navega a su
+  `Routes.artisanProfileRoute(artesanoId)`. Dos filas de `ConfianzaDots` para calidad y
+  confianza. El botón "Contactar artesano" usa `contactoPublico` (con `telefono` como
+  respaldo si el artesano no lo configuró), limpia el número a solo dígitos y abre
+  `https://wa.me/<numero>?text=<mensaje>` con un intent `ACTION_VIEW`; si no hay ninguna
+  app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual.
+- **Perfil del artesano** (`ArtisanProfileScreen` → `ArtisanProfileViewModel`): cabecera
+  con el mismo patrón + degradado de Entrada/Login (`PatternBackground`), avatar, chip de
+  RUAC, bio y contacto público, estadísticas (cantidad de productos, suma de `likes`),
+  `ConfianzaDots` sobre el promedio de los productos del artesano, y su grilla de
+  productos (`ProductoFeedCard`, compartida con el feed del cliente). Si
+  `currentUserId == artesanoId`, aparece un ícono de editar junto al contacto que abre un
+  diálogo para actualizar `bio`/`contactoPublico`
+  (`AuthRepository.actualizarCamposUsuario`, un `update()` parcial genérico). Accesible
+  desde el nombre del artesano en una tarjeta del feed, desde la fila del artesano en el
+  Detalle, y (para el propio artesano) desde un ícono nuevo en el encabezado de
+  `HomeArtesanoScreen`.
+- **Perfil del cliente y Likes** (`ClientProfileScreen`, `LikesScreen`): el perfil del
+  cliente es un menú (información básica — solo `nombre`, editable en un diálogo; mis
+  likes; historial de compras y configuración de la cuenta como placeholders; cerrar
+  sesión) sin avatar real — no existe ningún campo de foto de perfil ni flujo de subida,
+  así que siempre se muestra un ícono por defecto. "Mis likes" lista los productos que el
+  usuario marcó con like: primero `obtenerProductosLikeadosPorUsuario` (ids, vía
+  `collectionGroup`), luego `obtenerProductosPorIds` (en bloques de 30 con
+  `whereIn(FieldPath.documentId(), ...)`) para traerlos de una vez en vez de una lectura
+  por producto. "Cerrar sesión" llama a `AuthRepository.cerrarSesion()` y navega a
+  `Routes.WELCOME` limpiando todo el back stack (`popUpTo(0) { inclusive = true }`).
 
 ## Diseño y marca
 
@@ -436,10 +478,18 @@ Detalle de la configuración en `functions/SETUP.md`.
 - Catálogo del cliente (`HomeClienteScreen`): feed de productos de todos los artesanos,
   búsqueda visual, chips de categoría, like con contador real, y Detalle de producto con
   datos del artesano y contacto por WhatsApp (Fase 3).
+- Perfil del artesano (editable por su dueño: bio y contacto público), perfil del cliente
+  (información básica, likes, cerrar sesión) y pantalla de Likes real (Fase 4).
+- Toda la app respeta la barra de estado y la barra de navegación del sistema
+  (`Modifier.windowInsetsPadding(WindowInsets.safeDrawing)` en el contenedor de contenido
+  de cada pantalla) — es la convención del proyecto de aquí en adelante para cualquier
+  pantalla nueva con su propia barra superior o inferior (Fase 4).
 - Identidad visual del brand kit v2 (paleta guinda/borgoña/azul, Fraunces + Plus Jakarta
   Sans, patrón textil) aplicada en Entrada, Login, Registro (Fase 1), Home Artesano, Panel
-  de Publicaciones, Publicar y Editar producto (Fase 2), y Home Cliente y Detalle de
-  producto (Fase 3) — solo `ProfileScreen` sigue siendo un placeholder sin estilo propio.
+  de Publicaciones, Publicar y Editar producto (Fase 2), Home Cliente y Detalle de
+  producto (Fase 3), y Perfil del artesano (Fase 4) — `ClientProfileScreen`/`LikesScreen`
+  usan la misma paleta con fondo claro; solo `ProfileScreen` (sin usar) sigue siendo un
+  placeholder sin estilo propio.
 - Verificación de correo obligatoria en el registro, por código de 6 dígitos generado y
   validado por Cloud Functions (no por el mecanismo nativo de Firebase Auth): la cuenta
   de Firebase Auth y el documento en `usuarios` solo se crean **después** de verificar
@@ -448,13 +498,19 @@ Detalle de la configuración en `functions/SETUP.md`.
   Functions `enviarCodigoVerificacion` / `verificarCodigo`).
 
 **Pendiente / placeholder**
-- `ProfileScreen.kt` sigue siendo un `Text()` de una línea, sin diseño ni datos reales —
-  el bottom nav del cliente ya navega hacia ella, pero la pantalla en sí es de una fase
-  futura.
-- `Routes.RECOGNITION`, `Routes.LIKES` y `Routes.RUAC_BADGE` están registradas y navegables
-  desde `HomeClienteScreen`/`ProductDetailScreen`, pero apuntan a un `PlaceholderScreen`
-  genérico — el reconocimiento visual (OpenCV), la lista de likes y la insignia RUAC real
-  son de fases futuras.
+- `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
+  pantalla (`ARTISAN_PROFILE`/`CLIENT_PROFILE` lo reemplazaron), se dejó sin tocar ni
+  eliminar por quedar fuera del alcance de la Fase 4.
+- `Routes.RECOGNITION`, `Routes.RUAC_BADGE`, `Routes.PURCHASE_HISTORY` y
+  `Routes.ACCOUNT_SETTINGS` están registradas y navegables, pero apuntan a un
+  `PlaceholderScreen` genérico — el reconocimiento visual (OpenCV), la insignia RUAC
+  real, el historial de compras y la configuración de la cuenta son de fases futuras.
+- No existe ningún campo de foto de perfil (`fotoUrl` o similar) ni flujo de subida de
+  imagen de perfil — el avatar de `ClientProfileScreen` y `ArtisanProfileScreen` siempre
+  muestra un ícono por defecto.
+- "Información básica" del cliente solo permite editar `nombre` — el correo está atado a
+  la identidad de Firebase Auth y cambiarlo requeriría un flujo de reautenticación, fuera
+  de alcance.
 - Tras un registro exitoso, `RegisterScreen` solo muestra un `Toast`: no navega a login
   ni a ninguna otra pantalla.
 - `ProductRepository.guardarProducto()` (variante sin imagen) existe pero no lo invoca
@@ -473,14 +529,9 @@ Detalle de la configuración en `functions/SETUP.md`.
 - `calidadPromedio`/`confianzaPromedio` existen en el modelo pero nunca se calculan — la
   UI los muestra como "sin valoraciones aún" (puntos grises) hasta que exista la fase de
   "Valorar compra".
-- Las reglas de Firestore permiten leer el documento completo de `usuarios/{uid}` a
-  cualquier usuario autenticado (antes solo el propio uid podía leerlo) — necesario para
-  que el cliente vea nombre/teléfono/RUAC del artesano en el Detalle de producto. Efecto
-  secundario aceptado: campos no pensados para mostrarse (correo, fecha de nacimiento,
-  número de RUAC) también quedan visibles para cualquier usuario con sesión; no existe un
-  documento de "perfil público" separado.
-- No hay pantalla de "Perfil del cliente" ni "Perfil del artesano" reales — ambas
-  reutilizan hoy el mismo `ProfileScreen.kt` placeholder.
+- Las reglas de Firestore que abren la lectura de `usuarios/{uid}` a cualquier usuario
+  autenticado (ver Modelo de datos) siguen con el mismo trade-off de privacidad aceptado
+  en la Fase 3.
 - El RUAC se recibe y se guarda, pero no hay ninguna verificación real del documento ni
   del número.
 - Un correo que ya tiene cuenta en Firebase Auth solo se detecta al final del registro,
