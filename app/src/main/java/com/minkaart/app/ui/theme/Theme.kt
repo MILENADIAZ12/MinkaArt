@@ -7,7 +7,11 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 /**
- * Tema Minka Art.
+ * Tema Minka Art — brand kit v2.
+ *
+ * Solo hay 5 tokens de marca (Guinda, Borgona, AzulClaro, AzulAcero, Marfil) para los
+ * ~15 roles de Material 3, así que varios roles reutilizan el mismo token — no se
+ * inventan colores fuera del brand kit.
  *
  * El color dinámico (Material You) está desactivado a propósito: con minSdk 31
  * siempre estaría activo y reemplazaría la paleta de marca por los colores del
@@ -16,80 +20,80 @@ import androidx.compose.runtime.Composable
 
 private val LightColorScheme = lightColorScheme(
     // Acción principal
-    primary = Terracotta,
-    onPrimary = WarmWhite,
-    primaryContainer = PinkClaySoft,
-    onPrimaryContainer = BrownDeep,
+    primary = Borgona,
+    onPrimary = Marfil,
+    primaryContainer = AzulClaro,
+    onPrimaryContainer = Guinda,
 
     // Acción secundaria
-    secondary = BrownMid,
-    onSecondary = Cream,
-    secondaryContainer = PinkClay,
-    onSecondaryContainer = BrownDeep,
+    secondary = AzulAcero,
+    onSecondary = Marfil,
+    secondaryContainer = AzulClaro,
+    onSecondaryContainer = Guinda,
 
     // Acento suave (chips, etiquetas)
-    tertiary = PinkClay,
-    onTertiary = BrownDeep,
-    tertiaryContainer = PinkClaySoft,
-    onTertiaryContainer = BrownDeep,
+    tertiary = AzulClaro,
+    onTertiary = Guinda,
+    tertiaryContainer = AzulClaro,
+    onTertiaryContainer = Guinda,
 
     // Fondos y superficies
-    background = Beige,
-    onBackground = BrownDeep,
-    surface = Cream,
-    onSurface = BrownDeep,
-    surfaceVariant = WarmWhite,
-    onSurfaceVariant = BrownMid,
+    background = Marfil,
+    onBackground = Guinda,
+    surface = Marfil,
+    onSurface = Guinda,
+    surfaceVariant = AzulClaro.copy(alpha = 0.3f),
+    onSurfaceVariant = Guinda,
 
     // Bordes
-    outline = LineLight,
-    outlineVariant = PinkClaySoft,
+    outline = AzulClaro,
+    outlineVariant = AzulClaro.copy(alpha = 0.5f),
 
     // Inversos (snackbars, tooltips)
-    inverseSurface = Espresso,
-    inverseOnSurface = Cream,
-    inversePrimary = TerracottaLight,
+    inverseSurface = Guinda,
+    inverseOnSurface = Marfil,
+    inversePrimary = AzulClaro,
 
-    scrim = Espresso
+    scrim = Guinda
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = TerracottaLight,
-    onPrimary = Espresso,
-    primaryContainer = TerracottaDark,
-    onPrimaryContainer = Cream,
+    primary = AzulClaro,
+    onPrimary = Guinda,
+    primaryContainer = Borgona,
+    onPrimaryContainer = Marfil,
 
-    secondary = BrownSoft,
-    onSecondary = Espresso,
-    secondaryContainer = BrownDeep,
-    onSecondaryContainer = Cream,
+    secondary = AzulClaro,
+    onSecondary = Guinda,
+    secondaryContainer = AzulAcero,
+    onSecondaryContainer = Marfil,
 
-    tertiary = PinkClay,
-    onTertiary = Espresso,
-    tertiaryContainer = BrownDeep,
-    onTertiaryContainer = PinkClaySoft,
+    tertiary = AzulClaro,
+    onTertiary = Guinda,
+    tertiaryContainer = Borgona,
+    onTertiaryContainer = Marfil,
 
-    background = Espresso,
-    onBackground = Cream,
-    surface = EspressoDeep,
-    onSurface = Cream,
-    surfaceVariant = BrownDeep,
-    onSurfaceVariant = BrownSoft,
+    background = Guinda,
+    onBackground = Marfil,
+    surface = Guinda,
+    onSurface = Marfil,
+    surfaceVariant = Borgona,
+    onSurfaceVariant = AzulClaro,
 
-    outline = LineDark,
-    outlineVariant = BrownDeep,
+    outline = AzulAcero,
+    outlineVariant = Borgona,
 
-    inverseSurface = Beige,
-    inverseOnSurface = BrownDeep,
-    inversePrimary = Terracotta,
+    inverseSurface = Marfil,
+    inverseOnSurface = Guinda,
+    inversePrimary = Borgona,
 
-    scrim = Espresso
+    scrim = Guinda
 )
 
 @Composable
 fun MinkaArt_btaTheme(
     // La app se muestra siempre en claro: el brand kit y las pantallas
-    // están diseñados sobre fondo beige. Cambiar a isSystemInDarkTheme()
+    // están diseñados sobre fondo marfil. Cambiar a isSystemInDarkTheme()
     // solo cuando el modo oscuro esté revisado pantalla por pantalla.
     darkTheme: Boolean = false,
     content: @Composable () -> Unit
@@ -100,4 +104,3 @@ fun MinkaArt_btaTheme(
         content = content
     )
 }
-

@@ -32,12 +32,19 @@ verifica de ninguna forma.
 | Navegación | Navigation Compose | 2.9.0 |
 | Estado / MVVM | `lifecycle-viewmodel-compose` | 2.8.7 |
 | Backend | Firebase (BOM) — Auth, Firestore, Storage | 33.10.0 |
+| Backend | Firebase Cloud Functions (`firebase-functions-ktx`, BoM) | 33.10.0 |
+| Envío de correo | nodemailer (SMTP de Gmail, en Cloud Functions) | 6.9.15 |
 | Carga de imágenes | Coil (`coil-compose`) | 2.7.0 |
 | `minSdk` / `targetSdk` / `compileSdk` | — | 31 / 36 / 36 |
 | JVM target | — | 11 |
 
 Proyecto Firebase: `minka-art` (bucket de Storage `minka-art.firebasestorage.app`),
 configurado en `app/google-services.json`, que está versionado en el repositorio.
+
+Además del proyecto Android, el repositorio incluye `functions/`: un backend de Cloud
+Functions en Node.js + TypeScript (`onCall`, v2) que genera y valida el código de
+verificación de correo y lo envía por el SMTP de Gmail con [nodemailer](https://nodemailer.com). Ver
+[Modelo de datos](#modelo-de-datos) y [Flujos principales](#flujos-principales).
 
 ## Arquitectura
 
@@ -48,6 +55,7 @@ no corrutinas ni `Flow` — es la convención del proyecto, ver `CLAUDE.md`.
 ```
 MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
     Screen (Compose)  →  ViewModel  →  Repository  →  Firebase (Auth / Firestore / Storage)
+                                                    →  Cloud Functions → Firestore / Gmail SMTP
 ```
 
 | Capa | Paquete | Responsabilidad |
@@ -56,9 +64,10 @@ MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
 | Navegación | `com.minkaart2.app.navigation` | `Routes` (constantes de ruta) y `AppNavigation` (`NavHost`). |
 | UI | `com.minkaart2.app.ui.*` | Un paquete por pantalla (Composables), sin lógica de negocio. |
 | Estado | `com.minkaart2.app.viewModel` / `viewmodel` | Validación de formularios y estado observable (`State<T>`). |
-| Datos | `com.minkaart2.app.repository` | Llamadas directas a Firebase Auth/Firestore/Storage. |
+| Datos | `com.minkaart2.app.repository` | Llamadas directas a Firebase Auth/Firestore/Storage, y a las Cloud Functions de verificación de correo (`AuthRepository.enviarCodigoVerificacion` / `verificarCodigo`). |
 | Modelo | `com.minkaart2.app.data.model` | `data class` que se serializan/deserializan con Firestore. |
 | Tema | `com.minkaart2.app.ui.theme` | Paleta de marca, tipografía, `MaterialTheme`. |
+| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. |
 
 ## Estructura del proyecto
 
@@ -84,6 +93,12 @@ app/src/main/java/com/minkaart/app/
 │   ├── ProductViewModel.kt
 │   └── RegisterViewModel.kt
 └── ui/
+    ├── components/                # Composables reutilizables del brand kit v2
+    │   ├── PatternBackground.kt   # degradado + patrón textil, con blur opcional
+    │   ├── GlassCard.kt           # tarjeta "de vidrio esmerilado"
+    │   ├── GlassTextField.kt      # campo con ícono y línea inferior
+    │   ├── GradientButton.kt      # botón con degradado + variante outline
+    │   └── RolePillToggle.kt      # selector Artesano/Cliente en pills
     ├── home/
     │   ├── HomeArtesanoScreen.kt
     │   └── HomeClienteScreen.kt   # placeholder
@@ -98,6 +113,19 @@ app/src/main/java/com/minkaart/app/
         ├── Color.kt
         ├── Theme.kt
         └── Type.kt
+```
+
+Además, en la raíz del repositorio (fuera de `app/`):
+
+```
+firebase.json               # configuración del proyecto Firebase (Functions, Firestore)
+.firebaserc                  # alias del proyecto Firebase (minka-art)
+firestore.indexes.json       # índices compuestos de Firestore
+functions/
+├── src/index.ts             # Cloud Functions onCall: enviarCodigoVerificacion, verificarCodigo
+├── lib/                     # salida compilada de TypeScript (generada, no editar a mano)
+├── package.json
+└── SETUP.md                 # cómo configurar el secreto RESEND_API_KEY y desplegar
 ```
 
 `LoginViewModel.kt` y `ProductViewModel.kt` declaran `package com.minkaart2.app.viewModel`
@@ -164,6 +192,22 @@ Firestore (`document()` sin argumentos).
 Ambos `data class` declaran valores por defecto en todos los campos: es un requisito de
 `DocumentSnapshot.toObject()` de Firestore, no un estilo opcional.
 
+### Firestore — colección `codigosVerificacion/{correo}`
+
+Definida y usada exclusivamente por las Cloud Functions (`functions/src/index.ts`); la app
+Android **nunca lee ni escribe esta colección directamente**, solo llama a las funciones
+`enviarCodigoVerificacion` y `verificarCodigo`. El documento id es el correo electrónico.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `codigo` | `String` | 6 dígitos, generado por la función |
+| `expiracion` | `Timestamp` | 10 minutos después de generado |
+| `intentos` | `Number` | Se incrementa en cada código incorrecto; máximo 5 |
+| `creado` | `Timestamp` | `FieldValue.serverTimestamp()` |
+
+El documento se borra automáticamente cuando el código se verifica con éxito, para que no
+pueda reutilizarse.
+
 ### Firebase Storage
 
 | Ruta | Contenido |
@@ -176,10 +220,30 @@ Ambos `data class` declaran valores por defecto en todos los campos: es un requi
 - **Registro** (`RegisterScreen` → `RegisterViewModel`): valida nombre, correo y
   contraseña (mínimo 6 caracteres) para cualquier rol; si el rol es `artesano`, exige
   además teléfono, fecha de nacimiento, región, productos que vende y al menos una
-  categoría. Si `tieneRuac == true`, exige número y documento. Crea el usuario en
-  Firebase Auth y, si aplica, sube primero el RUAC a Storage antes de escribir el
-  documento en `usuarios`. Al terminar solo muestra un `Toast`; no navega a ninguna
-  pantalla.
+  categoría. Si `tieneRuac == true`, exige número y documento. El registro se completa
+  en dos pasos, con verificación de correo por código de 6 dígitos generado por Cloud
+  Functions (no por el mecanismo nativo de Firebase Auth): **la cuenta de Firebase Auth
+  se crea solo después de verificar el código**, así nunca queda una cuenta huérfana en
+  Auth si el usuario no termina el proceso.
+  1. **`RegisterViewModel.iniciarRegistro`**: tras las validaciones locales, llama a
+     `AuthRepository.enviarCodigoVerificacion` (Cloud Function `enviarCodigoVerificacion`),
+     que genera un código de 6 dígitos, lo guarda en `codigosVerificacion/{correo}` con
+     expiración de 10 minutos y lo envía por correo con nodemailer vía el SMTP de Gmail.
+     Los datos del formulario
+     (incluida la contraseña y el `Uri` del RUAC) quedan en memoria del ViewModel
+     (`datosPendientes`) — **ninguna cuenta de Firebase Auth existe todavía** y el
+     documento en `usuarios` tampoco se escribe. El botón "Registrarse" pasa a mostrarse
+     como "Enviar código de verificación" y, tras el envío, la pantalla muestra un campo
+     numérico para el código de 6 dígitos, un botón "Verificar" y otro "Reenviar código".
+  2. **`RegisterViewModel.confirmarCodigoDeVerificacion`**: el usuario ingresa el código
+     recibido; la función llama a `AuthRepository.verificarCodigo` (Cloud Function
+     `verificarCodigo`), que lo compara contra Firestore (máximo 5 intentos fallidos, 10
+     minutos de vigencia). **Solo si el código es válido**, `RegisterViewModel` recién ahí
+     crea la cuenta con `createUserWithEmailAndPassword`, sube el RUAC a Storage si aplica
+     y escribe el documento en `usuarios`; el botón cambia a "✓ Has sido registrado
+     correctamente". Si el código es incorrecto, expiró o se agotaron los intentos, se
+     muestra el mensaje de error correspondiente y **los datos del formulario no se
+     pierden**: el usuario puede reintentar o reenviar el código sin volver a llenarlo.
 - **Login** (`LoginScreen` → `LoginViewModel` → `AuthRepository`): autentica con
   Firebase Auth y luego consulta el campo `rol` en `usuarios/{uid}` para decidir el
   destino (`HOME_CLIENTE` o `HOME_ARTESANO`), limpiando `LOGIN` del back stack.
@@ -198,24 +262,31 @@ mapeada a roles de Material 3 en `Theme.kt`:
 
 | Token | Hex | Uso |
 |---|---|---|
-| `Terracotta` | `#C6704E` | Color primario, botones de acción |
-| `Beige` | `#F1E3D0` | Fondo principal |
-| `Cream` | `#FBF5EA` | Superficies, tarjetas |
-| `WarmWhite` | `#FFFDF9` | Campos de texto, superficies elevadas |
-| `BrownDeep` | `#4A3122` | Texto principal |
-| `PinkClay` / `PinkClaySoft` | `#E7BFB6` / `#F3DCD5` | Acento suave (chips, etiquetas) |
-| `Espresso` | `#2B1B10` | Fondos oscuros / modo oscuro |
+| `Guinda` | `#3B0F1A` | Vinotinto profundo — fondos oscuros, texto principal |
+| `Borgona` | `#66172E` | Marca, botones, degradados |
+| `AzulClaro` | `#B7C7D9` | Detalles, fondos suaves |
+| `AzulAcero` | `#55708E` | Acentos fríos, degradado de botones |
+| `Marfil` | `#F2EDE6` | Blanco cálido — fondo principal, texto sobre oscuro |
 
-`Theme.kt` define esquemas claro y oscuro completos, pero `MinkaArt_btaTheme` fuerza
-`darkTheme = false` a propósito: el brand kit está diseñado sobre fondo beige y las
-pantallas no se han revisado en modo oscuro. El color dinámico (Material You) está
+Es el brand kit v2; solo hay 5 tokens para los ~15 roles de `lightColorScheme` de
+Material 3, así que `Theme.kt` reutiliza tokens entre varios roles (ver comentarios en el
+archivo). `MinkaArt_btaTheme` sigue forzando `darkTheme = false` a propósito: las
+pantallas no se han revisado en modo oscuro. El color dinámico (Material You) sigue
 desactivado deliberadamente para no reemplazar la paleta de marca por los colores del
 fondo de pantalla del usuario.
 
-`Type.kt` usa `FontFamily.Serif` en cursiva como sustituto temporal de **Fraunces**
-(titulares, saludos) y `FontFamily.SansSerif` como sustituto de **Manrope** (interfaz),
-manteniendo la escala de tamaños del brand kit. Cambiar a las fuentes reales solo
-requiere reemplazar esas dos referencias por familias cargadas desde `res/font`.
+`Type.kt` usa **Fraunces** (titulares, saludos, logotipo) y **Plus Jakarta Sans**
+(interfaz) como fuentes reales, no como sustitutos temporales. Google Fonts no distribuye
+ninguna de las dos como archivos estáticos por peso, así que cada `FontFamily` carga un
+único archivo variable (`res/font/fraunces_variable.ttf`,
+`res/font/plus_jakarta_sans_variable.ttf`) varias veces, una por peso, usando
+`FontVariation.Settings` sobre el eje `wght` (API experimental de Compose,
+`@OptIn(ExperimentalTextApi::class)` en el propio archivo). Fraunces fija además el eje
+óptico (`opsz`) en un valor alto porque solo se usa en titulares.
+
+Las pantallas de Entrada, Login y Registro usan además el patrón textil
+`res/drawable/bg_pattern_tejido.jpg` como fondo decorativo, superpuesto a un degradado
+diagonal de marca (`ui/components/PatternBackground.kt`).
 
 ## Configuración y ejecución
 
@@ -234,6 +305,37 @@ Comandos (PowerShell / cmd, desde la raíz del proyecto):
 
 En Linux/macOS, usar `./gradlew` en lugar de `.\gradlew.bat`.
 
+**Cloud Functions** (`functions/`, Node.js + TypeScript): requieren el CLI de Firebase
+(`npm install -g firebase-tools`) y, una sola vez, una cuenta de Gmail con verificación en
+dos pasos y una [contraseña de aplicación](https://myaccount.google.com/apppasswords),
+registrada como par de secretos:
+
+```powershell
+firebase functions:secrets:set GMAIL_USER
+firebase functions:secrets:set GMAIL_APP_PASSWORD
+```
+
+Para compilar y desplegar:
+
+```powershell
+cd functions
+npm install
+npm run build
+firebase deploy --only functions
+```
+
+Si el deploy falla con `Cannot determine backend specification. Timeout after 10000`, no es
+un error del código: el análisis inicial de las funciones tiene un límite de 10 segundos que
+una máquina Windows en frío (antivirus escaneando `node_modules`) supera con facilidad. Se
+resuelve ampliando el límite antes de desplegar:
+
+```powershell
+$env:FUNCTIONS_DISCOVERY_TIMEOUT=120      # en cmd.exe: set FUNCTIONS_DISCOVERY_TIMEOUT=120
+firebase deploy --only functions
+```
+
+Detalle de la configuración en `functions/SETUP.md`.
+
 ## Estado actual y pendientes
 
 **Implementado**
@@ -241,7 +343,15 @@ En Linux/macOS, usar `./gradlew` en lugar de `.\gradlew.bat`.
 - Login con Firebase Auth y enrutado según rol.
 - Publicación de una artesanía con imagen, historia y datos comerciales.
 - Listado de "mis publicaciones" para el artesano autenticado.
-- Tema e identidad visual de marca aplicados vía Material 3.
+- Identidad visual del brand kit v2 (paleta guinda/borgoña/azul, Fraunces + Plus Jakarta
+  Sans, patrón textil) aplicada en Entrada, Login y Registro — Home cliente/artesano,
+  publicación y perfil siguen con el estilo anterior, pendientes de una fase futura.
+- Verificación de correo obligatoria en el registro, por código de 6 dígitos generado y
+  validado por Cloud Functions (no por el mecanismo nativo de Firebase Auth): la cuenta
+  de Firebase Auth y el documento en `usuarios` solo se crean **después** de verificar
+  el código (`RegisterViewModel.iniciarRegistro` + `confirmarCodigoDeVerificacion`,
+  `AuthRepository.enviarCodigoVerificacion` / `verificarCodigo` sobre las Cloud
+  Functions `enviarCodigoVerificacion` / `verificarCodigo`).
 
 **Pendiente / placeholder**
 - `HomeClienteScreen.kt` y `ProfileScreen.kt` son literalmente un `Text()` de una línea;
@@ -259,6 +369,18 @@ En Linux/macOS, usar `./gradlew` en lugar de `.\gradlew.bat`.
 - El modelo `Product.imagenes` es una lista, pero el flujo actual solo guarda una imagen.
 - El RUAC se recibe y se guarda, pero no hay ninguna verificación real del documento ni
   del número.
+- Un correo que ya tiene cuenta en Firebase Auth solo se detecta al final del registro,
+  al llamar a `createUserWithEmailAndPassword` después de verificar el código (la Cloud
+  Function `enviarCodigoVerificacion` no comprueba si el correo ya está registrado).
+- El correo de verificación se envía por el SMTP de Gmail (remitente `@gmail.com`), con el
+  límite de envío propio de Gmail de aproximadamente 500 correos/día; suficiente para
+  desarrollo y pruebas, pero no para producción a gran escala. Si se necesita un remitente
+  con dominio propio y sin ese límite, hay que verificar un dominio en un proveedor
+  transaccional (p. ej. Resend).
+- La cuenta de Firebase Auth creada al final del registro queda con `emailVerified =
+  false`, porque la verificación la hace la Cloud Function contra Firestore, no el
+  mecanismo nativo de Firebase Auth. `isEmailVerified` no se comprueba en ningún punto
+  de la app (login, publicación, etc.), así que hoy esto no bloquea nada, pero conviene
+  tenerlo presente si en el futuro se agrega alguna comprobación basada en ese campo.
 - No hay tests reales: solo quedan las plantillas por defecto de Android Studio
   (`ExampleUnitTest.kt`, `ExampleInstrumentedTest.kt`).
-- El directorio del proyecto no es un repositorio git todavía.

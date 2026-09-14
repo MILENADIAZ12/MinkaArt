@@ -2,11 +2,15 @@ package com.minkaart2.app.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 
 class AuthRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val functions = Firebase.functions
 
     fun iniciarSesion(
         correo: String,
@@ -92,5 +96,95 @@ class AuthRepository {
                         ?: "Error al enviar el correo de recuperación"
                 )
             }
+    }
+
+    // =========================
+    // VERIFICACIÓN DE CORREO POR CÓDIGO DE 6 DÍGITOS
+    // (Cloud Functions: enviarCodigoVerificacion / verificarCodigo)
+    // =========================
+
+    fun enviarCodigoVerificacion(
+        correo: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        functions
+            .getHttpsCallable("enviarCodigoVerificacion")
+            .call(hashMapOf("correo" to correo))
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { error ->
+                onError(mapearErrorEnvioCodigo(error))
+            }
+    }
+
+    fun verificarCodigo(
+        correo: String,
+        codigo: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        functions
+            .getHttpsCallable("verificarCodigo")
+            .call(
+                hashMapOf(
+                    "correo" to correo,
+                    "codigo" to codigo
+                )
+            )
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { error ->
+                onError(mapearErrorVerificacionCodigo(error))
+            }
+    }
+
+    private fun mapearErrorEnvioCodigo(error: Exception): String {
+
+        val excepcion = error as? FirebaseFunctionsException
+            ?: return error.message ?: "No pudimos enviar el código. Intenta de nuevo."
+
+        return when (excepcion.code) {
+            FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
+                "El correo electrónico no es válido"
+
+            FirebaseFunctionsException.Code.INTERNAL ->
+                "No pudimos enviar el correo. Intenta de nuevo."
+
+            FirebaseFunctionsException.Code.UNAVAILABLE,
+            FirebaseFunctionsException.Code.DEADLINE_EXCEEDED ->
+                "Revisa tu conexión a internet e intenta de nuevo"
+
+            else -> excepcion.message ?: "No pudimos enviar el código. Intenta de nuevo."
+        }
+    }
+
+    private fun mapearErrorVerificacionCodigo(error: Exception): String {
+
+        val excepcion = error as? FirebaseFunctionsException
+            ?: return error.message ?: "No pudimos verificar el código. Intenta de nuevo."
+
+        return when (excepcion.code) {
+            FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
+                "El código es incorrecto. Revísalo e intenta de nuevo."
+
+            FirebaseFunctionsException.Code.NOT_FOUND ->
+                "No hay un código pendiente para este correo. Solicita uno nuevo."
+
+            FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
+                "Demasiados intentos fallidos. Solicita un código nuevo."
+
+            FirebaseFunctionsException.Code.DEADLINE_EXCEEDED ->
+                "El código expiró. Solicita uno nuevo."
+
+            FirebaseFunctionsException.Code.UNAVAILABLE ->
+                "Revisa tu conexión a internet e intenta de nuevo"
+
+            else -> excepcion.message ?: "No pudimos verificar el código. Intenta de nuevo."
+        }
     }
 }

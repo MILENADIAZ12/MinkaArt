@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "MinkaArt_bta"
 include(":app")
- 

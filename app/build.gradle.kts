@@ -41,12 +41,12 @@ android {
 }
 
 dependencies {
-
     implementation(platform("com.google.firebase:firebase-bom:33.10.0"))
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-functions-ktx")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
