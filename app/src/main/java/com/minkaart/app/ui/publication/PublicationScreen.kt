@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,8 +45,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.minkaart2.app.data.CatalogosProducto
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.ImageUploadBox
+import com.minkaart2.app.ui.components.MinkaDropdownField
 import com.minkaart2.app.ui.components.MinkaFormField
 import com.minkaart2.app.viewModel.ProductViewModel
 
@@ -60,23 +63,25 @@ fun PublicationScreen(navController: NavController) {
     var descripcion by remember { mutableStateOf("") }
     var precio by remember { mutableStateOf("") }
     var historiaProceso by remember { mutableStateOf("") }
-    var regionOrigen by remember { mutableStateOf("") }
+    var materiaPrima by remember { mutableStateOf("") }
+    var materiaPrimaOtro by remember { mutableStateOf("") }
+    var departamento by remember { mutableStateOf("") }
+    var municipio by remember { mutableStateOf("") }
     var categoria by remember { mutableStateOf("") }
+    var categoriaOtro by remember { mutableStateOf("") }
+    var clasificacion by remember { mutableStateOf(CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR) }
 
-    var imagenUri by remember {
-        mutableStateOf<Uri?>(null)
-    }
+    val imagenesUris = remember { mutableStateListOf<Uri>() }
 
     val productViewModel: ProductViewModel = viewModel()
     val context = LocalContext.current
 
-    val selectorImagen = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
+    val selectorImagenes = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
 
-        if (uri != null) {
-            imagenUri = uri
-        }
+        val espacioDisponible = ProductViewModel.MAX_IMAGENES - imagenesUris.size
+        imagenesUris.addAll(uris.take(espacioDisponible))
     }
 
     Column(
@@ -140,8 +145,9 @@ fun PublicationScreen(navController: NavController) {
         ) {
 
             ImageUploadBox(
-                onClick = { selectorImagen.launch("image/*") },
-                pickedUri = imagenUri,
+                onClickAgregar = { selectorImagenes.launch("image/*") },
+                imagenesNuevas = imagenesUris,
+                onEliminarNueva = { uri -> imagenesUris.remove(uri) },
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
@@ -183,28 +189,61 @@ fun PublicationScreen(navController: NavController) {
                 placeholder = "Cómo se elabora, técnica y tradición…"
             )
 
-            MinkaFormField(
-                label = "Región de origen",
-                value = regionOrigen,
-                onValueChange = { regionOrigen = it },
-                placeholder = "Ej: Bogotá, Boyacá, La Guajira"
+            MinkaDropdownField(
+                label = "Materia prima",
+                opciones = CatalogosProducto.MATERIAS_PRIMAS,
+                valorSeleccionado = materiaPrima,
+                onSeleccionar = { materiaPrima = it }
             )
 
-            MinkaFormField(
-                label = "Categoría",
-                value = categoria,
-                onValueChange = { categoria = it },
-                placeholder = "Ej: Tejidos, Cerámica, Joyería"
-            )
+            if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA) {
 
-            if (imagenUri != null) {
-
-                Text(
-                    text = "Imagen seleccionada correctamente",
-                    color = Guinda.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall
+                MinkaFormField(
+                    label = "Especifica cuál",
+                    value = materiaPrimaOtro,
+                    onValueChange = { materiaPrimaOtro = it },
+                    placeholder = "Escribe la materia prima de tu artesanía"
                 )
             }
+
+            MinkaDropdownField(
+                label = "Departamento",
+                opciones = CatalogosProducto.DEPARTAMENTOS,
+                valorSeleccionado = departamento,
+                onSeleccionar = { departamento = it }
+            )
+
+            MinkaFormField(
+                label = "Municipio",
+                value = municipio,
+                onValueChange = { municipio = it },
+                placeholder = "Ej: Ráquira, Usiacurí, Mompox"
+            )
+
+            MinkaDropdownField(
+                label = "Categoría",
+                opciones = CatalogosProducto.CATEGORIAS,
+                valorSeleccionado = categoria,
+                onSeleccionar = { categoria = it }
+            )
+
+            if (categoria == CatalogosProducto.CATEGORIA_OTROS) {
+
+                MinkaFormField(
+                    label = "Especifica cuál",
+                    value = categoriaOtro,
+                    onValueChange = { categoriaOtro = it },
+                    placeholder = "Escribe la categoría de tu artesanía"
+                )
+            }
+
+            MinkaDropdownField(
+                label = "Clasificación (opcional)",
+                opciones = listOf(CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR) +
+                    CatalogosProducto.CLASIFICACIONES,
+                valorSeleccionado = clasificacion,
+                onSeleccionar = { clasificacion = it }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -219,9 +258,15 @@ fun PublicationScreen(navController: NavController) {
                         descripcion = descripcion,
                         precio = precioLong,
                         historiaProceso = historiaProceso,
-                        regionOrigen = regionOrigen,
+                        materiaPrima = materiaPrima,
+                        materiaPrimaOtro = materiaPrimaOtro,
+                        departamento = departamento,
+                        municipio = municipio,
                         categoria = categoria,
-                        imagenUri = imagenUri,
+                        categoriaOtro = categoriaOtro,
+                        clasificacion = clasificacion
+                            .takeUnless { it == CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR },
+                        imagenesUris = imagenesUris.toList(),
 
                         onSuccess = {
 
@@ -235,9 +280,14 @@ fun PublicationScreen(navController: NavController) {
                             descripcion = ""
                             precio = ""
                             historiaProceso = ""
-                            regionOrigen = ""
+                            materiaPrima = ""
+                            materiaPrimaOtro = ""
+                            departamento = ""
+                            municipio = ""
                             categoria = ""
-                            imagenUri = null
+                            categoriaOtro = ""
+                            clasificacion = CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR
+                            imagenesUris.clear()
                         },
 
                         onError = { mensaje ->

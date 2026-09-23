@@ -57,4 +57,42 @@ object Routes {
     fun adminRuacReviewRoute(artesanoId: String) = "admin_ruac_review/$artesanoId"
 
     const val REQUEST_RUAC = "request_ruac"
+
+    // =========================
+    // FASE 6 — Registrar venta, Valorar compra, Calidad y confianza
+    // =========================
+
+    const val REGISTER_SALE = "register_sale/{productId}"
+
+    fun registerSaleRoute(productId: String) = "register_sale/$productId"
+
+    const val RATE_SALE = "rate_sale/{ventaId}"
+
+    fun rateSaleRoute(ventaId: String) = "rate_sale/$ventaId"
+
+    const val QUALITY_TRUST = "quality_trust/{productId}"
+
+    fun qualityTrustRoute(productId: String) = "quality_trust/$productId"
+
+    // =========================
+    // NOTIFICACIONES (campana)
+    // =========================
+
+    const val NOTIFICATIONS = "notifications"
+
+    /**
+     * Traduce un [tipo] + [referenciaId] de `Notificacion` a una ruta navegable — usado
+     * tanto por `NotificationsScreen` (al tocar una fila) como por `AppNavigation` (deep
+     * link desde el push de FCM), para no repetir esta tabla en dos sitios. `null` si el
+     * tipo no se reconoce (defensivo: nunca debería pasar, pero evita un crash si un
+     * cliente viejo recibe un tipo agregado después).
+     */
+    fun rutaDeNotificacion(tipo: String, referenciaId: String): String? = when (tipo) {
+        "venta" -> rateSaleRoute(referenciaId)
+        "valoracion" -> qualityTrustRoute(referenciaId)
+        "like" -> productDetailRoute(referenciaId)
+        "ruac_aprobado" -> ruacBadgeRoute(referenciaId)
+        "ruac_rechazado" -> REQUEST_RUAC
+        else -> null
+    }
 }

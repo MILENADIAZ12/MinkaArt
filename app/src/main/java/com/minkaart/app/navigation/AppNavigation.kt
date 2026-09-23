@@ -1,6 +1,7 @@
 package com.minkaart2.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,6 +15,7 @@ import com.minkaart2.app.ui.components.PlaceholderScreen
 import com.minkaart2.app.ui.home.HomeArtesanoScreen
 import com.minkaart2.app.ui.home.HomeClienteScreen
 import com.minkaart2.app.ui.login.LoginScreen
+import com.minkaart2.app.ui.notifications.NotificationsScreen
 import com.minkaart2.app.ui.product.ProductDetailScreen
 import com.minkaart2.app.ui.profile.ArtisanProfileScreen
 import com.minkaart2.app.ui.profile.ClientProfileScreen
@@ -24,13 +26,35 @@ import com.minkaart2.app.ui.publication.PublicationScreen
 import com.minkaart2.app.ui.register.RegisterScreen
 import com.minkaart2.app.ui.ruac.RequestRuacScreen
 import com.minkaart2.app.ui.ruac.RuacBadgeScreen
+import com.minkaart2.app.ui.sales.PurchaseHistoryScreen
+import com.minkaart2.app.ui.sales.QualityTrustScreen
+import com.minkaart2.app.ui.sales.RateSaleScreen
+import com.minkaart2.app.ui.sales.RegisterSaleScreen
 import com.minkaart2.app.ui.welcome.WelcomeScreen
 import com.minkaart2.app.ui.publication.MyProductsScreen
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null) {
 
     val navController = rememberNavController()
+
+    // Deep link desde el push de una notificación (MinkaMessagingService): navega una
+    // sola vez por cada par (tipo, referencia) nuevo que llegue, resuelto con la misma
+    // tabla que usa NotificationsScreen al tocar una fila (Routes.rutaDeNotificacion), en
+    // vez de repetir aquí el `when` de tipos. Si la sesión de Firebase Auth ya había
+    // expirado al tocar la notificación, la pantalla destino simplemente fallará su
+    // propia validación (fuera de alcance encadenar un login-y-continuar para este caso).
+    LaunchedEffect(tipoInicial, referenciaInicial) {
+
+        if (tipoInicial != null && referenciaInicial != null) {
+
+            val ruta = Routes.rutaDeNotificacion(tipoInicial, referenciaInicial)
+
+            if (ruta != null) {
+                navController.navigate(ruta)
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -81,6 +105,9 @@ fun AppNavigation() {
                 },
                 onNuevoProducto = {
                     navController.navigate(Routes.PUBLICATION)
+                },
+                onRegistrarVenta = { productId ->
+                    navController.navigate(Routes.registerSaleRoute(productId))
                 }
             )
         }
@@ -152,7 +179,7 @@ fun AppNavigation() {
         }
 
         composable(Routes.PURCHASE_HISTORY) {
-            PlaceholderScreen(titulo = "Historial de compras")
+            PurchaseHistoryScreen(navController)
         }
 
         composable(Routes.ACCOUNT_SETTINGS) {
@@ -183,6 +210,10 @@ fun AppNavigation() {
 
         composable(Routes.PROFILE) {
             ProfileScreen()
+        }
+
+        composable(Routes.NOTIFICATIONS) {
+            NotificationsScreen(navController)
         }
 
         // =========================
@@ -217,6 +248,64 @@ fun AppNavigation() {
 
         composable(Routes.REQUEST_RUAC) {
             RequestRuacScreen(navController)
+        }
+
+        // =========================
+        // FASE 6 — Registrar venta, Valorar compra, Calidad y confianza
+        // =========================
+
+        composable(
+            route = Routes.REGISTER_SALE,
+            arguments = listOf(
+                navArgument("productId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val productId = backStackEntry.arguments?.getString("productId")
+
+            if (productId != null) {
+
+                RegisterSaleScreen(
+                    productId = productId,
+                    navController = navController
+                )
+            }
+        }
+
+        composable(
+            route = Routes.RATE_SALE,
+            arguments = listOf(
+                navArgument("ventaId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val ventaId = backStackEntry.arguments?.getString("ventaId")
+
+            if (ventaId != null) {
+
+                RateSaleScreen(
+                    ventaId = ventaId,
+                    navController = navController
+                )
+            }
+        }
+
+        composable(
+            route = Routes.QUALITY_TRUST,
+            arguments = listOf(
+                navArgument("productId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+
+            val productId = backStackEntry.arguments?.getString("productId")
+
+            if (productId != null) {
+
+                QualityTrustScreen(
+                    productId = productId,
+                    navController = navController
+                )
+            }
         }
     }
 }

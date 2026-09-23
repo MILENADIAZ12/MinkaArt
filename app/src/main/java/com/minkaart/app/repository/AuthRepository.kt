@@ -118,6 +118,51 @@ class AuthRepository {
             }
     }
 
+    /**
+     * Guarda/actualiza el token de FCM del usuario actual — llamado al abrir la app con
+     * sesión iniciada y desde `MinkaMessagingService.onNewToken` cuando el token rota.
+     */
+    fun guardarTokenNotificaciones(
+        uid: String,
+        token: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        actualizarCamposUsuario(
+            uid = uid,
+            campos = mapOf("fcmToken" to token),
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
+    /**
+     * Todos los usuarios con rol "cliente" — usado por el buscador de
+     * `RegisterSaleScreen`, que filtra por nombre/correo en memoria (mismo patrón que el
+     * buscador de productos).
+     */
+    fun obtenerClientes(
+        onSuccess: (List<User>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        firestore.collection("usuarios")
+            .whereEqualTo("rol", "cliente")
+            .get()
+            .addOnSuccessListener { resultado ->
+
+                val clientes = resultado.documents.mapNotNull { documento ->
+                    documento.toObject(User::class.java)
+                }
+
+                onSuccess(clientes)
+            }
+            .addOnFailureListener { error ->
+                onError(error.message ?: "Error al consultar los clientes")
+            }
+    }
+
     fun obtenerUsuarioPorId(
         uid: String,
         onSuccess: (User) -> Unit,
@@ -380,19 +425,44 @@ class AuthRepository {
     // =========================
 
     /**
-     * El artesano solicita (o vuelve a solicitar, tras un rechazo) su RUAC: sube el
-     * documento de soporte a Storage (mismo path que ya usaba el RUAC del registro) y deja
-     * `ruacEstado = "pendiente"` en su propio documento de usuario.
+     * El artesano solicita (o vuelve a solicitar, tras un rechazo, o edita uno ya
+     * verificado — ver [RequestRuacViewModel]) su RUAC: sube el documento de soporte a
+     * Storage (mismo path que ya usaba el RUAC del registro) y deja `ruacEstado =
+     * "pendiente"` en su propio documento de usuario. Si no se adjunta un documento nuevo
+     * ([documentoUri] es `null`) pero ya existe uno guardado ([documentoUrlExistente]), se
+     * conserva ese en vez de exigir volver a subirlo — así "Editar RUAC" no obliga a
+     * resubir el archivo si el artesano solo corrigió un dato de texto.
      */
     fun enviarSolicitudRuac(
         uid: String,
         registro: String,
         region: String,
         tecnica: String,
-        documentoUri: Uri,
+        documentoUri: Uri?,
+        documentoUrlExistente: String?,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
+
+        if (documentoUri == null) {
+
+            if (documentoUrlExistente.isNullOrBlank()) {
+                onError("Adjunta el documento o foto de soporte del RUAC")
+                return
+            }
+
+            guardarSolicitudRuac(
+                uid = uid,
+                registro = registro,
+                region = region,
+                tecnica = tecnica,
+                documentoUrl = documentoUrlExistente,
+                onSuccess = onSuccess,
+                onError = onError
+            )
+
+            return
+        }
 
         val referenciaDocumento = storage.reference
             .child("ruac")
@@ -406,18 +476,12 @@ class AuthRepository {
                 referenciaDocumento.downloadUrl
                     .addOnSuccessListener { url ->
 
-                        val campos = mapOf(
-                            "ruacRegistro" to registro,
-                            "ruacRegion" to region,
-                            "ruacTecnica" to tecnica,
-                            "ruacDocumentoUrl" to url.toString(),
-                            "ruacEstado" to "pendiente",
-                            "ruacSolicitadoEn" to FieldValue.serverTimestamp()
-                        )
-
-                        actualizarCamposUsuario(
+                        guardarSolicitudRuac(
                             uid = uid,
-                            campos = campos,
+                            registro = registro,
+                            region = region,
+                            tecnica = tecnica,
+                            documentoUrl = url.toString(),
                             onSuccess = onSuccess,
                             onError = onError
                         )
@@ -435,6 +499,67 @@ class AuthRepository {
                 onError(
                     error.message
                         ?: "Error al subir el documento RUAC"
+                )
+            }
+    }
+
+    private fun guardarSolicitudRuac(
+        uid: String,
+        registro: String,
+        region: String,
+        tecnica: String,
+        documentoUrl: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val campos = mapOf(
+            "ruacRegistro" to registro,
+            "ruacRegion" to region,
+            "ruacTecnica" to tecnica,
+            "ruacDocumentoUrl" to documentoUrl,
+            "ruacEstado" to "pendiente",
+            "ruacSolicitadoEn" to FieldValue.serverTimestamp()
+        )
+
+        actualizarCamposUsuario(
+            uid = uid,
+            campos = campos,
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
+    /**
+     * El artesano retira su propio RUAC verificado — a diferencia de rechazar (que hace un
+     * administrador), esto no pasa por ninguna revisión. Deja el usuario en el mismo
+     * estado que si nunca hubiera solicitado RUAC; `ruacSolicitadoEn`/`ruacRevisadoPor` no
+     * se tocan (no se muestran en ninguna pantalla, quedan como rastro de auditoría).
+     */
+    fun eliminarRuac(
+        uid: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val campos: Map<String, Any?> = mapOf(
+            "ruacEstado" to "no_solicitado",
+            "ruacRegistro" to null,
+            "ruacRegion" to null,
+            "ruacTecnica" to null,
+            "ruacDocumentoUrl" to null,
+            "ruacVerificadoEn" to null,
+            "ruacUltimaValidacion" to null
+        )
+
+        firestore.collection("usuarios")
+            .document(uid)
+            .update(campos)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { error ->
+
+                onError(
+                    error.message ?: "Error al eliminar el RUAC"
                 )
             }
     }

@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+minka_carga_100/serviceAccountKey.json
+minka_carga_100/node_modules/

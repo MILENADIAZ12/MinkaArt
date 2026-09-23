@@ -49,9 +49,9 @@ class ProductRepository {
             }
     }
 
-    fun guardarProductoConImagen(
+    fun guardarProductoConImagenes(
         producto: Product,
-        imagenUri: Uri,
+        imagenesUris: List<Uri>,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -68,56 +68,104 @@ class ProductRepository {
         // Generamos primero el ID del producto
         val documento = db.collection("productos").document()
 
-        // Ubicación de la fotografía en Firebase Storage
-        val imagenReferencia = storage.reference
-            .child("productos")
-            .child(artesanoId)
-            .child(documento.id)
-            .child("imagen_principal")
+        subirImagenes(
+            artesanoId = artesanoId,
+            productoId = documento.id,
+            imagenesUris = imagenesUris,
+            prefijoArchivo = "imagen",
 
-        // Primero subimos la fotografía
-        imagenReferencia
-            .putFile(imagenUri)
-            .addOnSuccessListener {
+            onSuccess = { urls ->
 
-                // Obtenemos la URL pública de descarga
-                imagenReferencia.downloadUrl
-                    .addOnSuccessListener { url ->
+                val productoFinal = producto.copy(
+                    id = documento.id,
+                    artesanoId = artesanoId,
+                    imagenes = urls,
+                    fechaPublicacion = System.currentTimeMillis()
+                )
 
-                        val productoFinal = producto.copy(
-                            id = documento.id,
-                            artesanoId = artesanoId,
-                            imagenes = listOf(url.toString()),
-                            fechaPublicacion = System.currentTimeMillis()
-                        )
-
-                        // Solo después de subir la imagen
-                        // guardamos el producto en Firestore
-                        documento
-                            .set(productoFinal)
-                            .addOnSuccessListener {
-                                onSuccess()
-                            }
-                            .addOnFailureListener { error ->
-                                onError(
-                                    error.message
-                                        ?: "Error al guardar el producto"
-                                )
-                            }
+                // Solo después de subir todas las imágenes
+                // guardamos el producto en Firestore
+                documento
+                    .set(productoFinal)
+                    .addOnSuccessListener {
+                        onSuccess()
                     }
                     .addOnFailureListener { error ->
                         onError(
                             error.message
-                                ?: "Error al obtener la URL de la imagen"
+                                ?: "Error al guardar el producto"
                         )
                     }
-            }
-            .addOnFailureListener { error ->
-                onError(
-                    error.message
-                        ?: "Error al subir la imagen"
-                )
-            }
+            },
+
+            onError = onError
+        )
+    }
+
+    /**
+     * Sube cada imagen a `productos/{artesanoId}/{productoId}/{prefijoArchivo}_{índice}` y
+     * devuelve las URLs de descarga en el mismo orden que [imagenesUris] — cada subida
+     * escribe en la ranura de su propio índice, así el orden final no depende de qué
+     * subida termine primero.
+     */
+    private fun subirImagenes(
+        artesanoId: String,
+        productoId: String,
+        imagenesUris: List<Uri>,
+        prefijoArchivo: String,
+        onSuccess: (List<String>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        if (imagenesUris.isEmpty()) {
+            onSuccess(emptyList())
+            return
+        }
+
+        val urls = arrayOfNulls<String>(imagenesUris.size)
+        var subidasCompletadas = 0
+        var yaFalló = false
+
+        imagenesUris.forEachIndexed { indice, uri ->
+
+            val referencia = storage.reference
+                .child("productos")
+                .child(artesanoId)
+                .child(productoId)
+                .child("${prefijoArchivo}_$indice")
+
+            referencia
+                .putFile(uri)
+                .addOnSuccessListener {
+
+                    referencia.downloadUrl
+                        .addOnSuccessListener { url ->
+
+                            if (yaFalló) return@addOnSuccessListener
+
+                            urls[indice] = url.toString()
+                            subidasCompletadas++
+
+                            if (subidasCompletadas == imagenesUris.size) {
+                                onSuccess(urls.filterNotNull())
+                            }
+                        }
+                        .addOnFailureListener { error ->
+
+                            if (!yaFalló) {
+                                yaFalló = true
+                                onError(error.message ?: "Error al obtener la URL de una imagen")
+                            }
+                        }
+                }
+                .addOnFailureListener { error ->
+
+                    if (!yaFalló) {
+                        yaFalló = true
+                        onError(error.message ?: "Error al subir una imagen")
+                    }
+                }
+        }
     }
 
     fun obtenerMisProductos(
@@ -199,7 +247,8 @@ class ProductRepository {
     fun actualizarProducto(
         productoId: String,
         producto: Product,
-        nuevaImagenUri: Uri?,
+        imagenesExistentes: List<String>,
+        imagenesNuevasUris: List<Uri>,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -214,12 +263,12 @@ class ProductRepository {
         val artesanoId = usuarioActual.uid
         val documento = db.collection("productos").document(productoId)
 
-        if (nuevaImagenUri == null) {
+        if (imagenesNuevasUris.isEmpty()) {
 
-            // Sin imagen nueva: actualizamos los campos del producto
-            // y conservamos las imágenes que ya tenía.
+            // Sin imágenes nuevas: actualizamos los campos del producto
+            // y conservamos las que el artesano decidió mantener.
             documento
-                .set(producto.copy(id = productoId, artesanoId = artesanoId))
+                .set(producto.copy(id = productoId, artesanoId = artesanoId, imagenes = imagenesExistentes))
                 .addOnSuccessListener {
                     onSuccess()
                 }
@@ -231,51 +280,38 @@ class ProductRepository {
 
         } else {
 
-            // Con imagen nueva: se sube al mismo path que usa
-            // guardarProductoConImagen, sobrescribiendo la anterior.
-            val imagenReferencia = storage.reference
-                .child("productos")
-                .child(artesanoId)
-                .child(productoId)
-                .child("imagen_principal")
+            // Con imágenes nuevas: se suben con un prefijo distinto al de la publicación
+            // original (marca de tiempo) para no chocar con los índices ya ocupados por
+            // las imágenes existentes, y se agregan después de las que se conservan.
+            subirImagenes(
+                artesanoId = artesanoId,
+                productoId = productoId,
+                imagenesUris = imagenesNuevasUris,
+                prefijoArchivo = "imagen_${System.currentTimeMillis()}",
 
-            imagenReferencia
-                .putFile(nuevaImagenUri)
-                .addOnSuccessListener {
+                onSuccess = { nuevasUrls ->
 
-                    imagenReferencia.downloadUrl
-                        .addOnSuccessListener { url ->
+                    val productoFinal = producto.copy(
+                        id = productoId,
+                        artesanoId = artesanoId,
+                        imagenes = imagenesExistentes + nuevasUrls
+                    )
 
-                            val productoFinal = producto.copy(
-                                id = productoId,
-                                artesanoId = artesanoId,
-                                imagenes = listOf(url.toString())
-                            )
-
-                            documento
-                                .set(productoFinal)
-                                .addOnSuccessListener {
-                                    onSuccess()
-                                }
-                                .addOnFailureListener { error ->
-                                    onError(
-                                        error.message
-                                            ?: "Error al actualizar el producto"
-                                    )
-                                }
+                    documento
+                        .set(productoFinal)
+                        .addOnSuccessListener {
+                            onSuccess()
                         }
                         .addOnFailureListener { error ->
                             onError(
                                 error.message
-                                    ?: "Error al obtener la URL de la imagen"
+                                    ?: "Error al actualizar el producto"
                             )
                         }
-                }
-                .addOnFailureListener { error ->
-                    onError(
-                        error.message ?: "Error al subir la imagen"
-                    )
-                }
+                },
+
+                onError = onError
+            )
         }
     }
 
@@ -345,6 +381,23 @@ class ProductRepository {
                 onError(
                     error.message ?: "Error al consultar el catálogo"
                 )
+            }
+    }
+
+    /**
+     * Suma 1 a `vistas`. Sin `onSuccess`: es un contador en segundo plano, no hay nada
+     * que confirmarle al usuario (mismo criterio que ya usa el proyecto para el badge
+     * de notificaciones — si falla, no se avisa con un Toast).
+     */
+    fun incrementarVista(
+        productoId: String,
+        onError: (String) -> Unit
+    ) {
+
+        db.collection("productos").document(productoId)
+            .update("vistas", FieldValue.increment(1))
+            .addOnFailureListener { error ->
+                onError(error.message ?: "Error al registrar la visita")
             }
     }
 

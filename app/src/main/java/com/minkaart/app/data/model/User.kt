@@ -34,6 +34,11 @@ data class User(
 
     // Perfil público del artesano (Fase 4)
     val bio: String? = null,
-    val contactoPublico: String? = null
+    val contactoPublico: String? = null,
+
+    // Token de Firebase Cloud Messaging del dispositivo actual — se sobrescribe cada vez
+    // que la app arranca con sesión iniciada o cuando el token rota (MinkaMessagingService
+    // .onNewToken). Null hasta que el usuario abre la app al menos una vez tras esta fase.
+    val fcmToken: String? = null
 
 )

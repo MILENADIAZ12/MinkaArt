@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -35,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,15 +50,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BottomNavBar
 import com.minkaart2.app.ui.components.BottomNavItemData
+import com.minkaart2.app.ui.components.EfectoNotificaciones
+import com.minkaart2.app.ui.components.IconoNotificaciones
 import com.minkaart2.app.ui.components.ProductoFeedCard
+import com.minkaart2.app.ui.components.RolePillToggle
 import com.minkaart2.app.viewModel.HomeClienteViewModel
+import com.minkaart2.app.viewModel.NotificationsViewModel
 import com.minkaart2.app.util.normalizar
 import kotlinx.coroutines.delay
 
@@ -68,14 +79,22 @@ private val TextoSecundario = Color(0xFF8A7480)
 fun HomeClienteScreen(navController: NavController) {
 
     val viewModel: HomeClienteViewModel = viewModel()
+    val notificationsViewModel: NotificationsViewModel = viewModel()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    EfectoNotificaciones()
 
     val productos by viewModel.productos
     val productosLikeados by viewModel.productosLikeados
     val nombresArtesanos by viewModel.nombresArtesanos
+    val statsArtesanos by viewModel.statsArtesanos
     val cargando by viewModel.cargando
+    val esArtesano by viewModel.esArtesano
+    val noLeidas by notificationsViewModel.noLeidas
 
     var categoriaSeleccionada by remember { mutableStateOf("Todos") }
+    var materiaPrimaSeleccionada by remember { mutableStateOf("Todos") }
 
     // Texto tal como se escribe, y su versión "asentada" 300ms después de la última
     // tecla — evita recalcular el filtro en cada pulsación si el catálogo crece.
@@ -94,6 +113,35 @@ fun HomeClienteScreen(navController: NavController) {
                 Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
             }
         )
+
+        viewModel.cargarRolUsuarioActual(
+            onError = { /* si falla, simplemente no se muestra el toggle de modo */ }
+        )
+
+        notificationsViewModel.cargar(
+            onError = { /* el badge simplemente queda sin número si falla */ }
+        )
+    }
+
+    // Refresca el badge de no leídas al volver de NotificationsScreen, sin reiniciar la
+    // app — mismo patrón que ya usa ArtisanProfileScreen/MyProductsScreen.
+    DisposableEffect(lifecycleOwner) {
+
+        val observer = LifecycleEventObserver { _, event ->
+
+            if (event == Lifecycle.Event.ON_RESUME) {
+
+                notificationsViewModel.cargar(
+                    onError = { /* si falla el refresco silencioso, se deja tal cual */ }
+                )
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     val categorias = remember(productos) {
@@ -104,23 +152,40 @@ fun HomeClienteScreen(navController: NavController) {
             .sorted()
     }
 
+    val materiasPrimas = remember(productos) {
+        listOf("Todos") + productos
+            .map { it.materiaPrima.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
+
     val textoBuscadoNormalizado = remember(textoBusquedaDebounced) {
         normalizar(textoBusquedaDebounced)
     }
 
-    // Categoría y texto se combinan con AND: si hay texto Y una categoría distinta de
-    // "Todos", el producto tiene que cumplir las dos condiciones a la vez.
-    val productosFiltrados = remember(productos, categoriaSeleccionada, textoBuscadoNormalizado) {
+    // Categoría, materia prima y texto se combinan con AND: el producto tiene que
+    // cumplir todas las condiciones activas a la vez (las que estén en "Todos" no
+    // filtran nada).
+    val productosFiltrados = remember(
+        productos,
+        categoriaSeleccionada,
+        materiaPrimaSeleccionada,
+        textoBuscadoNormalizado
+    ) {
         productos.filter { producto ->
 
             val cumpleCategoria = categoriaSeleccionada == "Todos" ||
                 producto.categoria == categoriaSeleccionada
 
+            val cumpleMateriaPrima = materiaPrimaSeleccionada == "Todos" ||
+                producto.materiaPrima == materiaPrimaSeleccionada
+
             val cumpleTexto = textoBuscadoNormalizado.isBlank() ||
                 normalizar(producto.nombre).contains(textoBuscadoNormalizado) ||
                 normalizar(producto.descripcion).contains(textoBuscadoNormalizado)
 
-            cumpleCategoria && cumpleTexto
+            cumpleCategoria && cumpleMateriaPrima && cumpleTexto
         }
     }
 
@@ -128,14 +193,78 @@ fun HomeClienteScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(Marfil)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
     ) {
+
+        // Encabezado — mismo patrón que HomeArtesanoScreen, para que los dos Home se
+        // vean consistentes (antes este Home no tenía ninguno).
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Marfil)
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                Box(
+                    modifier = Modifier
+                        .height(28.dp)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Guinda)
+                )
+
+                Text(
+                    text = "Minka Art",
+                    color = Guinda,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+            }
+
+            IconoNotificaciones(
+                noLeidas = noLeidas,
+                onClick = { navController.navigate(Routes.NOTIFICATIONS) }
+            )
+        }
+
+        // Toggle de cambio de modo — solo si el usuario autenticado es un artesano
+        // "viendo como cliente" (esArtesano viene del rol real en Firestore, nunca de
+        // la ruta), así un cliente real nunca lo ve. Queda fijo, antes del buscador,
+        // para funcionar también como el indicador persistente de en qué modo está.
+        if (esArtesano) {
+
+            RolePillToggle(
+                opciones = listOf("cliente" to "Cliente", "artesano" to "Artesano"),
+                valorSeleccionado = "cliente",
+                onSeleccionar = { valor ->
+
+                    if (valor == "artesano") {
+
+                        navController.navigate(Routes.HOME_ARTESANO) {
+                            popUpTo(Routes.HOME_ARTESANO) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                colorFondoActivo = Borgona,
+                colorFondoInactivo = Color.White,
+                colorBorde = Color.White,
+                colorTextoActivo = Marfil,
+                colorTextoInactivo = TextoSecundario
+            )
+        }
 
         // Barra de búsqueda
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp, 12.dp)
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.White)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -231,6 +360,41 @@ fun HomeClienteScreen(navController: NavController) {
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Chips de materia prima — mismo patrón que los de categoría, combinables con
+        // ella y con el buscador.
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            lazyRowItems(materiasPrimas) { materiaPrima ->
+
+                val activo = materiaPrima == materiaPrimaSeleccionada
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (activo) AzulAcero else Color.White)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { materiaPrimaSeleccionada = materiaPrima }
+                        )
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = materiaPrima,
+                        color = if (activo) Marfil else TextoSecundario,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         if (cargando) {
@@ -312,7 +476,8 @@ fun HomeClienteScreen(navController: NavController) {
                             navController.navigate(
                                 Routes.artisanProfileRoute(producto.artesanoId)
                             )
-                        }
+                        },
+                        confianzaArtesano = statsArtesanos[producto.artesanoId]
                     )
                 }
             }

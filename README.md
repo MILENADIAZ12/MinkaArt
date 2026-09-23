@@ -34,6 +34,7 @@ verifica de ninguna forma.
 | Estado / MVVM | `lifecycle-viewmodel-compose` | 2.8.7 |
 | Backend | Firebase (BOM) — Auth, Firestore, Storage | 33.10.0 |
 | Backend | Firebase Cloud Functions (`firebase-functions-ktx`, BoM) | 33.10.0 |
+| Notificaciones push | Firebase Cloud Messaging (`firebase-messaging`, BoM) | 33.10.0 |
 | Envío de correo | nodemailer (SMTP de Gmail, en Cloud Functions) | 6.9.15 |
 | Carga de imágenes | Coil (`coil-compose`) | 2.7.0 |
 | `minSdk` / `targetSdk` / `compileSdk` | — | 31 / 36 / 36 |
@@ -68,7 +69,7 @@ MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
 | Datos | `com.minkaart2.app.repository` | Llamadas directas a Firebase Auth/Firestore/Storage, y a las Cloud Functions de verificación de correo (`AuthRepository.enviarCodigoVerificacion` / `verificarCodigo`). |
 | Modelo | `com.minkaart2.app.data.model` | `data class` que se serializan/deserializan con Firestore. |
 | Tema | `com.minkaart2.app.ui.theme` | Paleta de marca, tipografía, `MaterialTheme`. |
-| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. |
+| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. Además, cuatro triggers de Firestore (`notificarNuevaVenta`, `notificarNuevaValoracion`, `notificarLikeNuevo`, `notificarCambioRuac`) escriben en `notificaciones` y envían el push de FCM. |
 
 ## Estructura del proyecto
 
@@ -80,14 +81,23 @@ MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
 ```
 app/src/main/java/com/minkaart/app/
 ├── MainActivity.kt
-├── data/model/
-│   ├── Product.kt          # documento de la colección "productos"
-│   └── User.kt              # documento de la colección "usuarios"
+├── data/
+│   ├── CatalogosProducto.kt # departamentos, categorías, materias primas y clasificaciones
+│   │                         # de Publicar/Editar producto (listas fijas, compartidas)
+│   ├── EscalaValoracion.kt  # niveles de calidad/confianza <-> puntos <-> etiqueta (Fase 6)
+│   └── model/
+│       ├── ArtesanoStats.kt # documento de "artesanoStats" — confianza del artesano
+│       ├── Notificacion.kt # documento de "notificaciones" — solo lo escriben Cloud Functions
+│       ├── Product.kt      # documento de la colección "productos"
+│       ├── User.kt          # documento de la colección "usuarios"
+│       ├── Valoracion.kt    # documento de "valoraciones"
+│       └── Venta.kt         # documento de la colección "ventas"
 ├── navigation/
 │   ├── AppNavigation.kt      # NavHost con todas las rutas registradas
-│   └── Routes.kt             # constantes de ruta (String)
+│   └── Routes.kt             # constantes de ruta (String), incluye rutaDeNotificacion()
 ├── repository/
 │   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos de usuarios, actualizar campos, cerrar sesión
+│   ├── NotificationRepository.kt # leer notificaciones y marcarlas como leídas (nunca las crea)
 │   └── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
 ├── viewModel/                 # ¡ojo con mayúscula/minúscula, ver más abajo!
 │   ├── ArtisanProfileViewModel.kt
@@ -95,6 +105,7 @@ app/src/main/java/com/minkaart/app/
 │   ├── HomeArtesanoViewModel.kt
 │   ├── LikesViewModel.kt
 │   ├── LoginViewModel.kt
+│   ├── NotificationsViewModel.kt # estado de la campana: lista + conteo de no leídas
 │   ├── ProductViewModel.kt
 │   └── RegisterViewModel.kt
 └── ui/
@@ -105,22 +116,34 @@ app/src/main/java/com/minkaart/app/
     ├── ruac/                      # Solicitud e insignia de RUAC (Fase 5)
     │   ├── RequestRuacScreen.kt   # el artesano solicita/re-solicita su RUAC
     │   └── RuacBadgeScreen.kt     # insignia real (reemplaza el placeholder de RUAC_BADGE)
+    ├── sales/                     # Ventas, valoraciones, calidad/confianza (Fase 6)
+    │   ├── RegisterSaleScreen.kt  # el artesano registra una venta a un cliente
+    │   ├── RateSaleScreen.kt      # el cliente valora una compra (solo pills, sin texto)
+    │   ├── QualityTrustScreen.kt  # resumen de calidad (producto) y confianza (artesano)
+    │   └── PurchaseHistoryScreen.kt # historial real del cliente (reemplaza el placeholder)
     ├── components/                # Composables reutilizables del brand kit v2
     │   ├── PatternBackground.kt   # degradado + patrón textil, con blur opcional
     │   ├── GlassCard.kt           # tarjeta "de vidrio esmerilado"
     │   ├── GlassTextField.kt      # campo con ícono y línea inferior (fondo oscuro)
     │   ├── GradientButton.kt      # botón con degradado + variante outline
-    │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills
-    │   ├── ImageUploadBox.kt      # caja de selección/preview de imagen (Publicar/Editar)
+    │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills (Registro, y
+    │   │                         # también el cambio de modo de los dos Home, con
+    │   │                         # colores propios vía parámetros opcionales)
+    │   ├── ImageUploadBox.kt      # selector de varias imágenes con miniaturas + eliminar
+    │   │                         # (Publicar/Editar), hasta ProductViewModel.MAX_IMAGENES
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
     │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, RUAC, etc.)
-    │   ├── ConfianzaDots.kt       # fila de 4 puntos (calidad/confianza), gris si no hay dato
+    │   ├── BarraValoracion.kt     # barra con degradado de marca (calidad/confianza), reemplaza a ConfianzaDots
     │   ├── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
-    │   └── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
+    │   ├── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
+    │   ├── IconoNotificaciones.kt # campana con badge de no leídas, compartida por los dos Home
+    │   ├── MinkaDropdownField.kt  # selector de una lista fija (Departamento/Categoría/Clasificación)
+    │   └── EfectoNotificaciones.kt # pide permiso de notificaciones + guarda el token FCM
     ├── home/
-    │   ├── HomeArtesanoScreen.kt
-    │   └── HomeClienteScreen.kt   # catálogo del cliente: búsqueda, chips, feed, bottom nav
+    │   ├── HomeArtesanoScreen.kt  # encabezado con campana + avatar de perfil
+    │   └── HomeClienteScreen.kt   # encabezado con campana, búsqueda, chips, feed, bottom nav
     ├── login/LoginScreen.kt
+    ├── notifications/NotificationsScreen.kt # centro de notificaciones, abierto desde la campana
     ├── product/ProductDetailScreen.kt  # detalle, artesano, calidad/confianza, contacto WhatsApp
     ├── profile/
     │   ├── ArtisanProfileScreen.kt  # perfil público del artesano, editable por su dueño
@@ -137,6 +160,9 @@ app/src/main/java/com/minkaart/app/
         ├── Color.kt
         ├── Theme.kt
         └── Type.kt
+├── service/
+│   └── MinkaMessagingService.kt   # FirebaseMessagingService: recibe el push, construye
+│                                   # la notificación, guarda el token si rota
 └── util/
     └── Texto.kt                    # normalizar(): quita tildes/mayúsculas para
                                      # búsqueda de texto; compartida por HomeClienteScreen
@@ -150,7 +176,10 @@ firebase.json               # configuración del proyecto Firebase (Functions, F
 .firebaserc                  # alias del proyecto Firebase (minka-art)
 firestore.indexes.json       # índices compuestos de Firestore
 functions/
-├── src/index.ts             # Cloud Functions onCall: enviarCodigoVerificacion, verificarCodigo
+├── src/index.ts             # Cloud Functions onCall (enviarCodigoVerificacion, verificarCodigo)
+│                             # y triggers de Firestore que alimentan "notificaciones"
+│                             # (notificarNuevaVenta, notificarNuevaValoracion,
+│                             # notificarLikeNuevo, notificarCambioRuac)
 ├── lib/                     # salida compilada de TypeScript (generada, no editar a mano)
 ├── package.json
 └── SETUP.md                 # cómo configurar el secreto RESEND_API_KEY y desplegar
@@ -172,16 +201,16 @@ de `AppNavigation.kt`:
 | `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial) | — |
 | `LOGIN` | `login` | `LoginScreen` | Sí | `WelcomeScreen`, `LoginScreen` (recuperar contraseña) |
 | `REGISTER` | `register` | `RegisterScreen` | Sí | `WelcomeScreen` |
-| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`) |
-| `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`) |
+| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`), toggle "Cliente" del encabezado de `HomeArtesanoScreen` (cambio de modo) |
+| `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`), toggle "Artesano" del encabezado de `HomeClienteScreen` y fila "Cambiar a modo artesano" de `ClientProfileScreen` (ambos solo si el usuario es artesano — vuelven al modo artesano) |
 | `MY_PRODUCTS` | `my_products` | `MyProductsScreen` (Panel de Publicaciones) | Sí | `HomeArtesanoScreen` |
 | `PUBLICATION` | `publication` | `PublicationScreen` | Sí | `HomeArtesanoScreen`, `MyProductsScreen` (chip "Nueva") |
 | `EDIT_PRODUCT` | `edit_product/{productId}` | `EditProductScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → Editar) |
 | `PRODUCT_DETAIL` | `product_detail/{productId}` | `ProductDetailScreen` | Sí, con argumento de ruta | `HomeClienteScreen` (tap en una tarjeta del feed) |
 | `ARTISAN_PROFILE` | `artisan_profile/{artesanoId}` | `ArtisanProfileScreen` | Sí, con argumento de ruta | `HomeClienteScreen` (nombre del artesano en una tarjeta), `ProductDetailScreen` (fila del artesano), `HomeArtesanoScreen` (ícono de perfil, propio) |
-| `CLIENT_PROFILE` | `client_profile` | `ClientProfileScreen` | Sí | `HomeClienteScreen` (bottom nav "Perfil") |
+| `CLIENT_PROFILE` | `client_profile` | `ClientProfileScreen` | Sí | `HomeClienteScreen` (bottom nav "Perfil") — también la ve un artesano "viendo como cliente" (rol real, no la ruta), con contenido algo distinto (ver Flujos principales) |
 | `LIKES` | `likes` | `LikesScreen` | Sí | `HomeClienteScreen` (bottom nav "Likes"), `ClientProfileScreen` ("Mis likes") |
-| `PURCHASE_HISTORY` | `purchase_history` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Historial de compras") |
+| `PURCHASE_HISTORY` | `purchase_history` | `PurchaseHistoryScreen` (real desde Fase 6) | Sí | `ClientProfileScreen` ("Historial de compras") |
 | `ACCOUNT_SETTINGS` | `account_settings` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Configuración de la cuenta") |
 | `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
 | `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
@@ -190,6 +219,10 @@ de `AppNavigation.kt`:
 | `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
+| `REGISTER_SALE` | `register_sale/{productId}` | `RegisterSaleScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → "Registrar venta") |
+| `RATE_SALE` | `rate_sale/{ventaId}` | `RateSaleScreen` | Sí, con argumento de ruta | `PurchaseHistoryScreen` (venta "Pendiente de valorar") |
+| `QUALITY_TRUST` | `quality_trust/{productId}` | `QualityTrustScreen` | Sí, con argumento de ruta | `ProductDetailScreen` (bloque de calidad/confianza), `ArtisanProfileScreen` (indicador de confianza) |
+| `NOTIFICATIONS` | `notifications` | `NotificationsScreen` | Sí | `HomeClienteScreen`, `HomeArtesanoScreen` (campana del encabezado) |
 
 ## Modelo de datos
 
@@ -220,6 +253,7 @@ el `uid` de Firebase Auth.
 | `ruacRevisadoPor` | `String?` | `uid` del administrador que aprobó/rechazó (auditoría) |
 | `bio` | `String?` | Solo artesano; texto corto "Sobre mí" en su Perfil, editable por él mismo |
 | `contactoPublico` | `String?` | Solo artesano; el contacto que decide mostrar públicamente (puede ser distinto de `telefono`). `ProductDetailScreen` lo usa para "Contactar artesano", con `telefono` como respaldo si está vacío |
+| `fcmToken` | `String?` | Token de Firebase Cloud Messaging del dispositivo actual. Se guarda/actualiza al abrir `HomeClienteScreen`/`HomeArtesanoScreen` (`EfectoNotificaciones`) y cuando el token rota (`MinkaMessagingService.onNewToken`). `null` hasta que el usuario abre la app al menos una vez tras este ajuste |
 
 Desde la Fase 3, cualquier usuario autenticado puede leer el documento de **cualquier**
 usuario (antes solo el propio uid) — necesario para que el cliente vea el perfil del
@@ -242,6 +276,17 @@ queda directo en `ruacEstado = "pendiente"` con `ruacRegistro`/`ruacDocumentoUrl
 quedan en `null`, porque el registro no los pide — solo `RequestRuacScreen` (solicitud
 posterior desde el perfil) los captura.
 
+**RUAC editable/eliminable (ajuste posterior a la Fase 5)**: `"verificado"` dejó de ser un
+estado final. El propio artesano puede "Editar RUAC" (reabre `RequestRuacScreen`
+precargado con sus datos; al guardar vuelve a `ruacEstado = "pendiente"` y actualiza
+`ruacSolicitadoEn`, así que la insignia deja de mostrarse como verificada hasta que el
+administrador la revise de nuevo — la solicitud editada reaparece en
+`AdminRuacListScreen` igual que una nueva) o "Eliminar RUAC" (`ruacEstado =
+"no_solicitado"` y limpia `ruacRegistro`/`ruacRegion`/`ruacTecnica`/`ruacDocumentoUrl`/
+`ruacVerificadoEn`/`ruacUltimaValidacion`; no pasa por revisión, es el artesano retirando
+su propio dato — `ruacSolicitadoEn`/`ruacRevisadoPor` no se tocan, quedan como rastro de
+auditoría que no se muestra en ninguna pantalla).
+
 ### Firestore — documento `configuracion/adminAccess`
 
 Un único documento, con un campo `pin: String`, que el administrador necesita para
@@ -263,15 +308,36 @@ Firestore (`document()` sin argumentos).
 | `descripcion` | `String` | |
 | `precio` | `Long` | |
 | `historiaProceso` | `String` | Historia / proceso de elaboración |
-| `regionOrigen` | `String` | |
-| `imagenes` | `List<String>` | URLs de Storage; en la práctica el flujo actual solo guarda una |
-| `vistas` | `Long` | Por defecto `0`; el campo existe pero todavía no hay ningún flujo (detalle de producto, vista del cliente) que lo incremente |
+| `materiaPrima` | `String` | Uno de los 50 valores curados de `CatalogosProducto.MATERIAS_PRIMAS` (dropdown en Publicar/Editar; era texto libre hasta un ajuste posterior, revertido porque generaba un catálogo interminable de chips de filtro) — si se elige "Otra", aparece un campo obligatorio "Especifica cuál" que se guarda en `materiaPrimaOtro`. `""` en productos publicados antes de agregar este campo. Alimenta los chips de filtro de materia prima de `HomeClienteScreen`, igual que `categoria` — derivados de los valores reales presentes en los productos cargados, no directamente de la lista fija |
+| `materiaPrimaOtro` | `String?` | Solo cuando `materiaPrima == "Otra"`. `null` en cualquier otro caso. `EditProductScreen` detecta un `materiaPrima` de un producto anterior al dropdown que no está en la lista curada y lo mueve aquí automáticamente (mismo criterio que la migración de `regionOrigen`) |
+| `regionOrigen` | `String` | **Heredado, solo lectura** (ver nota de migración abajo): ningún código nuevo lo vuelve a escribir, reemplazado por `departamento`/`municipio` |
+| `departamento` | `String` | Uno de los 33 departamentos de Colombia (`CatalogosProducto.DEPARTAMENTOS`), elegido con un dropdown en Publicar/Editar |
+| `municipio` | `String` | Texto libre — no hay una lista completa de los ~1100 municipios de Colombia dentro de la app |
+| `clasificacion` | `String?` | Opcional. Uno de `CatalogosProducto.CLASIFICACIONES` ("Artesanía indígena" / "tradicional popular" / "contemporánea o neoartesanía") o `null` si no se especificó |
+| `imagenes` | `List<String>` | URLs de Storage, hasta `ProductViewModel.MAX_IMAGENES` (15). `ProductDetailScreen` las muestra en un carrusel (`HorizontalPager`); tocar la imagen abre un visor de pantalla completa con zoom (pinch) y paneo |
+| `vistas` | `Long` | Por defecto `0`. Sube en 1 cada vez que `ProductDetailScreen` abre el producto (`ProductRepository.incrementarVista`, `FieldValue.increment(1)`), salvo que quien lo abra sea el propio artesano dueño (en cualquier modo). Cuenta por apertura, no por visitante único: abrir el mismo producto varias veces suma varias vistas |
 | `likes` | `Long` | Por defecto `0`. Se incrementa/decrementa con `ProductRepository.alternarLike`, en una transacción junto con `productos/{id}/likes/{uid}` (ver más abajo) |
 | `activo` | `Boolean` | Por defecto `true`. El artesano lo cambia desde el Panel de Publicaciones (menú ⋮ → Pausar/Activar); el catálogo del cliente (`HomeClienteScreen`) solo muestra los productos con `activo == true` |
 | `fechaPublicacion` | `Long` | Epoch millis, con el reloj del dispositivo (no `FieldValue.serverTimestamp()`); `0` en productos publicados antes de agregar este campo |
-| `categoria` | `String` | Texto libre (ej. "Tejidos", "Cerámica"); alimenta los chips de filtro del catálogo de cliente. Puede quedar vacío |
-| `calidadPromedio` | `Double?` | `null` hasta que exista la fase de "Valorar compra"; la UI lo trata como "sin valoraciones aún" en vez de inventar un valor |
-| `confianzaPromedio` | `Double?` | Mismo caso que `calidadPromedio` |
+| `categoria` | `String` | Una de las 16 opciones curadas de `CatalogosProducto.CATEGORIAS` (antes era texto libre); alimenta los chips de filtro del catálogo de cliente, que siguen derivándose de los valores reales guardados, no de esta lista fija |
+| `categoriaOtro` | `String?` | Solo cuando `categoria == "Otros"`: el texto libre que escribió el artesano en "Especifica cuál". `null` en cualquier otro caso (se limpia solo si el artesano cambia de categoría) |
+| `calidadSumaPuntos` | `Int` | Por defecto `0`. Suma de los puntos (1-4) de cada valoración de compra recibida — junto con `calidadConteo`, permite recalcular el promedio sin releer todas las valoraciones |
+| `calidadConteo` | `Int` | Por defecto `0`. Cuántas valoraciones recibió este producto |
+| `calidadPromedio` | `Double?` | `null` mientras `calidadConteo == 0`; la UI lo trata como "sin valoraciones aún" en vez de inventar un valor. Se recalcula en `SaleRepository.enviarValoracion` (Fase 6) |
+
+**La confianza NO vive en `productos`** — es del artesano, no del producto (ver
+`artesanoStats/{artesanoId}` más abajo). Antes de la Fase 6 existía por error un campo
+`Product.confianzaPromedio`, que nunca llegó a calcularse (se corrigió, ya no existe).
+
+**Nota de migración (`regionOrigen` → `departamento`/`municipio`)**: un producto publicado
+antes de este ajuste solo tiene `regionOrigen` (texto libre); su tarjeta/detalle lo sigue
+mostrando tal cual hasta que el artesano lo edite. Al abrir `EditProductScreen`, si
+`departamento` viene vacío se intenta un match exacto (sin distinguir mayúsculas) entre
+`regionOrigen` y los 33 departamentos: si coincide, se precarga ese departamento; si no
+coincide (porque `regionOrigen` traía texto libre, p. ej. una ciudad), el dropdown de
+departamento queda sin seleccionar y ese texto viejo se pone en el campo Municipio para no
+perderlo — el artesano lo reorganiza y, al guardar, el producto ya queda en el esquema
+nuevo. No hay ninguna migración automática por script.
 
 Ambos `data class` declaran valores por defecto en todos los campos: es un requisito de
 `DocumentSnapshot.toObject()` de Firestore, no un estilo opcional. Gracias a eso, agregar
@@ -318,6 +384,119 @@ Las dos reglas conviven sin conflicto (en Firestore, si cualquier `match` aplica
 concede el permiso, la operación se permite). El índice de `firestore.indexes.json` ya
 era correcto — el `PERMISSION_DENIED` era un problema de reglas, no de índices.
 
+### Firestore — colección `ventas/{autoId}` (Fase 6)
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | `String` | Igual al id del documento |
+| `productoId` | `String` | |
+| `artesanoId` | `String` | Debe ser el dueño real de `productoId` — verificado con un `get()` en la regla de `create` |
+| `clienteId` | `String` | Debe tener `rol == "cliente"` — verificado igual que `artesanoId` |
+| `fechaVenta` | `Timestamp` | Elegida en `RegisterSaleScreen` (por defecto, hoy) |
+| `valorado` | `Boolean` | Por defecto `false`. Pasa a `true` junto con la creación de `valoraciones/{esta-misma-id}` |
+| `creadoEn` | `Timestamp?` | Reloj del cliente (`Timestamp.now()`), no `serverTimestamp()` — se escribe como parte de un objeto completo, no de un mapa parcial |
+
+Solo el artesano dueño del producto puede crear una venta, y solo el cliente comprador
+puede leerla o marcarla como valorada — a diferencia de `productos`, nadie más (ni un
+tercer usuario ni un administrador) puede leer una venta ajena.
+
+### Firestore — colección `valoraciones/{ventaId}` (Fase 6)
+
+Usa **el mismo id que la venta** que valora — así una venta solo se puede valorar una vez
+sin lógica extra (un `create` sobre un id ya ocupado lo rechaza Firestore directamente).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | `String` | Igual al id de la venta |
+| `productoId` / `artesanoId` / `clienteId` | `String` | Copiados de la venta |
+| `calidad` | `String` | Una de `EscalaValoracion.NIVELES_CALIDAD` ("Excelente"/"Buena"/"Regular"/"Baja") |
+| `confianza` | `String` | Una de `EscalaValoracion.NIVELES_CONFIANZA` ("Muy alta"/"Alta"/"Media"/"Baja") |
+| `creadoEn` | `Timestamp?` | |
+
+Nunca se edita ni se borra (`allow update, delete: if false` en las reglas), a propósito,
+para que el puntaje no se pueda manipular después de aprobado.
+
+### Firestore — documento `artesanoStats/{artesanoId}` (Fase 6)
+
+La **confianza** del artesano — a diferencia de la calidad (que es por producto), la
+confianza es una sola cifra por persona, acumulada de todas sus ventas valoradas. No
+existe hasta la primera valoración recibida; mientras tanto se trata como
+`ArtesanoStats()` (todo en 0/`null`), no como un error.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `confianzaSumaPuntos` | `Int` | Suma de puntos (1-4) de cada valoración de confianza recibida |
+| `confianzaConteo` | `Int` | Cuántas valoraciones recibió este artesano |
+| `confianzaPromedio` | `Double?` | `null` mientras `confianzaConteo == 0` |
+
+`SaleRepository.enviarValoracion` actualiza `productos` (calidad) y `artesanoStats`
+(confianza) en la **misma transacción** que crea la valoración y marca la venta como
+valorada — todo o nada.
+
+**Conversión a puntos** (`data/EscalaValoracion.kt`): el primer nivel de cada escala vale
+4 puntos, el último vale 1 (Excelente/Muy alta=4 … Baja=1). El nivel mostrado en pantalla
+es el promedio redondeado al entero más cercano (mitad hacia arriba) mapeado de vuelta a
+la etiqueta; si el conteo es 0, se muestra "Aún no hay valoraciones" en vez de inventar
+un nivel.
+
+**Bug corregido — `PERMISSION_DENIED` al enviar una valoración**: la regla de
+`productos/{productId}` comparaba `resource.data.calidadSumaPuntos`/`calidadConteo` con
+acceso directo (`.campo`). Un producto publicado o editado por última vez *antes* de la
+Fase 6 no tiene esos campos escritos en el documento real de Firestore (el default de
+Kotlin `= 0` solo aplica después de leer el documento). Acceder con `.` a un campo que no
+existe **no da `null`, produce un error de evaluación**, y ese error hace que toda la
+regla se deniegue — sin ningún detalle en el cliente, solo `PERMISSION_DENIED`. Se
+corrigió usando `.get(campo, valorPorDefecto)` en toda la comparación de `productos`
+(ver `y`, función `productoBaseIgual`), y de paso se extrajo esa comparación a una
+función de reglas reutilizable en vez de repetirla tres veces — la próxima vez que se
+agregue un campo a `Product` se agrega en un solo lugar.
+
+**Tercera rama de `allow update` para `productos` (conteo de vistas)**: igual que las
+ramas de like y de calidad, un no-dueño puede actualizar `vistas` siempre que
+`productoBaseIgual` se cumpla, `likes`/`calidadSumaPuntos`/`calidadConteo` no cambien, y
+`vistas` suba en exactamente 1 — la usa `ProductDetailViewModel.cargarDetalle` al abrir
+el detalle. `vistas` salió de `productoBaseIgual` (antes bloqueaba cualquier cambio,
+como el resto de campos "base") y `materiaPrima` entró — se había quedado afuera desde
+que se agregó a `Product.kt`, lo que dejaba a cualquier no-dueño cambiarlo sin que
+ninguna rama lo notara. `materiaPrimaOtro` entró al mismo tiempo que `materiaPrima` se
+convirtió en dropdown, por la misma razón.
+
+### Firestore — colección `notificaciones/{autoId}`
+
+Definido en `app/src/main/java/com/minkaart/app/data/model/Notificacion.kt`. Respalda la
+campana de notificaciones (ícono en `HomeClienteScreen`/`HomeArtesanoScreen`,
+`NotificationsScreen`). A diferencia de todas las demás colecciones del proyecto, **la
+app nunca crea un documento aquí** — las reglas lo bloquean (`allow create: if false`) y
+solo las Cloud Functions (Admin SDK, que ignora las reglas) los escriben, para que ningún
+usuario pueda fabricar un aviso falso para otro. El propio destinatario solo puede
+marcarlo como leído.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | `String` | Igual al id del documento |
+| `destinatarioId` | `String` | `uid` de quien debe ver la notificación |
+| `tipo` | `String` | `"venta"` \| `"valoracion"` \| `"like"` \| `"ruac_aprobado"` \| `"ruac_rechazado"` |
+| `titulo` / `mensaje` | `String` | Texto mostrado en la fila y en el push de FCM |
+| `referenciaId` | `String` | Cambia de significado según `tipo`: `ventaId` (venta), `productoId` (valoracion/like) o el propio `uid` del artesano (ruac_aprobado/rechazado) — `Routes.rutaDeNotificacion(tipo, referenciaId)` es el único lugar que interpreta esta combinación para navegar |
+| `leida` | `Boolean` | Por defecto `false` |
+| `creadoEn` | `Timestamp?` | `FieldValue.serverTimestamp()`, puesto por la Cloud Function |
+
+La consulta de `NotificationRepository.obtenerNotificaciones` es una sola igualdad
+(`whereEqualTo("destinatarioId", uid)`); el orden por fecha se hace en memoria, mismo
+criterio que `obtenerTodosLosProductosActivos`/`obtenerVentasDelCliente` — no hace falta
+ningún índice compuesto nuevo en `firestore.indexes.json`.
+
+Las cuatro Cloud Functions que escriben aquí comparten el helper `avisar()` en
+`functions/src/index.ts`, que además envía el push de FCM (`data`-only, mismo criterio ya
+documentado abajo) si `usuarios/{destinatarioId}.fcmToken` existe:
+
+- `notificarNuevaVenta` (trigger en `ventas/{ventaId}`, ya existía) → cliente.
+- `notificarNuevaValoracion` (trigger en `valoraciones/{ventaId}`) → artesano.
+- `notificarLikeNuevo` (trigger en `productos/{productId}/likes/{userId}`) → artesano
+  dueño del producto, salvo que se dé like a sí mismo.
+- `notificarCambioRuac` (trigger en `usuarios/{uid}`, solo si `ruacEstado` cambió a
+  `"verificado"` o `"rechazado"`) → el propio artesano.
+
 ### Firestore — colección `codigosVerificacion/{correo}`
 
 Definida y usada exclusivamente por las Cloud Functions (`functions/src/index.ts`); la app
@@ -338,7 +517,8 @@ pueda reutilizarse.
 
 | Ruta | Contenido |
 |---|---|
-| `productos/{artesanoId}/{productoId}/imagen_principal` | Foto principal de una artesanía |
+| `productos/{artesanoId}/{productoId}/imagen_{índice}` | Fotos de una artesanía (`imagen_0`, `imagen_1`, …, hasta 15), subidas al publicar. Al editar, las imágenes nuevas se suben con el prefijo `imagen_{marcaDeTiempo}_{índice}` para no chocar con los índices ya ocupados por las que se conservan — el orden final en `Product.imagenes` es el que importa, no el nombre del archivo en Storage |
+| `productos/{artesanoId}/{productoId}/imagen_principal` | **Heredado**: nombre de archivo usado antes de agregar soporte de varias imágenes (una sola foto por producto). Los productos publicados antes de este ajuste conservan su imagen en esa ruta; su URL sigue guardada tal cual en `Product.imagenes`, nadie reconstruye la ruta a partir del nombre |
 | `ruac/{uid}/documento_ruac` | Documento RUAC adjuntado en el registro |
 
 ## Flujos principales
@@ -374,23 +554,42 @@ pueda reutilizarse.
   Firebase Auth y luego consulta el campo `rol` en `usuarios/{uid}` para decidir el
   destino (`HOME_CLIENTE` o `HOME_ARTESANO`), limpiando `LOGIN` del back stack.
 - **Publicar artesanía** (`PublicationScreen` → `ProductViewModel` → `ProductRepository`):
-  valida todos los campos y que haya una imagen seleccionada, sube la imagen a Storage,
-  obtiene su `downloadUrl` y solo entonces escribe el producto en Firestore — el orden
-  importa, si la subida falla no se crea el documento.
+  valida todos los campos y que haya al menos una imagen seleccionada (máximo
+  `ProductViewModel.MAX_IMAGENES` = 15, elegidas con
+  `ActivityResultContracts.GetMultipleContents()` vía `ImageUploadBox`), sube cada imagen a
+  Storage y solo entonces escribe el producto en Firestore con las URLs en el mismo orden
+  en que se eligieron — el orden de subida importa, si alguna falla no se crea el
+  documento. `EditProductScreen` puede quitar imágenes existentes y agregar nuevas en la
+  misma edición; ver la nota de migración de `regionOrigen` y la tabla de Storage más
+  abajo para el prefijo de archivo que usa cada caso. Materia prima es un dropdown de 50
+  opciones curadas (`CatalogosProducto.MATERIAS_PRIMAS`) — si se elige "Otra", aparece
+  un campo obligatorio "Especifica cuál" que se guarda en `materiaPrimaOtro` (mismo
+  patrón que Categoría/"Otros"; era texto libre hasta un ajuste posterior, revertido
+  porque generaba un catálogo interminable en los chips de filtro de materia prima). El
+  origen se captura como
+  Departamento (dropdown, `CatalogosProducto.DEPARTAMENTOS`) + Municipio (texto libre,
+  `MinkaDropdownField`/`MinkaFormField`), la Categoría es un dropdown de 16 opciones
+  curadas (`CatalogosProducto.CATEGORIAS`) — si se elige "Otros", aparece un campo
+  obligatorio "Especifica cuál" que se guarda en `categoriaOtro` — y la Clasificación es
+  un dropdown opcional de 3 valores (o "Sin especificar" → `null`). `EditProductScreen`
+  usa el mismo formulario y componentes; ver las notas de migración de `regionOrigen` y
+  de `materiaPrima` en el modelo de `productos` para cómo se comportan con productos
+  publicados antes de cada ajuste.
 - **Gestión de productos** (`HomeArtesanoScreen` → `MyProductsScreen` "Panel de
   Publicaciones" → `EditProductScreen`): el Home del artesano saluda por nombre (vía
-  `HomeArtesanoViewModel.cargarDatosArtesano` → `AuthRepository.obtenerUsuarioActual`) y
-  muestra una vista previa de hasta 4 productos; el botón "Ver publicaciones" lleva al
-  Panel, que lista todos los productos del artesano con un menú de tres puntos por
-  tarjeta. El Home del artesano tiene su propio bottom nav (`BottomNavBar`, compartido
-  con `HomeClienteScreen`): Inicio (la propia pantalla), **Explorar** → navega a
-  `Routes.HOME_CLIENTE` (el artesano ve el mismo catálogo de todos los artesanos que ve
-  un cliente, con búsqueda, chips, like y detalle — no hay una pantalla de catálogo
-  separada para el rol artesano; dentro de esa pantalla "prestada" el ítem "Perfil" de su
-  bottom nav sigue llevando a `Routes.CLIENT_PROFILE`, límite conocido y no resuelto),
-  RUAC → `Routes.ruacBadgeRoute` (placeholder), Likes → `Routes.LIKES`, Perfil →
-  `Routes.artisanProfileRoute` con el uid del propio artesano (mismo destino que el
-  ícono de perfil del encabezado, que se dejó también por no estorbar):
+  `HomeArtesanoViewModel.cargarDatosArtesano` → `AuthRepository.obtenerUsuarioActual`),
+  muestra el toggle de cambio de modo (ver "Cambio de modo artesano/cliente" más abajo),
+  los botones Publicar/Ver publicaciones y el panel de Estadísticas — ya no muestra una
+  grilla de productos (se quitó: era redundante con la grilla de `ArtisanProfileScreen` y
+  la lista de `MyProductsScreen`, las dos a un tap de distancia); el botón "Ver
+  publicaciones" lleva al Panel, que lista todos los productos del artesano con un menú
+  de tres puntos por tarjeta. El Home del artesano
+  tiene su propio bottom nav (`BottomNavBar`, compartido con `HomeClienteScreen`), ahora
+  con 4 ítems (antes 5: se quitó "Explorar", reemplazado por el toggle — ver más abajo):
+  Inicio (la propia pantalla), RUAC → `Routes.ruacBadgeRoute` (placeholder), Likes →
+  `Routes.LIKES`, Perfil → `Routes.artisanProfileRoute` con el uid del propio artesano
+  (mismo destino que el ícono de perfil del encabezado, que se dejó también por no
+  estorbar):
   - **Editar** navega a `EditProductScreen` (ruta `edit_product/{productId}`), que carga
     el producto con `ProductViewModel.obtenerProductoPorId`, precarga el formulario y,
     al guardar, llama a `actualizarProducto` (mismas validaciones que publicar) y vuelve
@@ -402,9 +601,9 @@ pueda reutilizarse.
     `ProductViewModel.cambiarEstadoProducto`, que actualiza solo el campo `activo` en
     Firestore (`update()` parcial, no reescribe el resto del documento) y refleja el
     cambio al instante en la lista en memoria. Cada tarjeta muestra además "`{vistas}`
-    vistas · `{likes}` likes" (`vistas` siempre en 0 por ahora; `likes` sí sube cuando un
-    cliente le da "me gusta" al producto, ver más abajo) y, si el producto tiene
-    `fechaPublicacion`, "Publicado el dd/MM/yyyy".
+    vistas · `{likes}` likes" (ambos contadores reales — ver la nota de `vistas` en el
+    modelo de `productos`) y, si el producto tiene `fechaPublicacion`, "Publicado el
+    dd/MM/yyyy".
   - El Panel se refresca automáticamente cada vez que vuelve a primer plano
     (`ON_RESUME`), para que los cambios de Editar/Publicar se vean sin reiniciar la app —
     Navigation Compose mantiene su `ProductViewModel` vivo en el back stack, así que un
@@ -415,14 +614,56 @@ pueda reutilizarse.
     de su propio catálogo, no en el de los demás. La función `normalizar()` (quita
     tildes/mayúsculas para que la búsqueda no dependa de escribir los acentos exactos) se
     extrajo a `util/Texto.kt` para que ambas pantallas la reutilicen en vez de tener cada
-    una su propia copia. `HomeArtesanoScreen` en sí (el saludo + vista previa de 4
-    productos) no tiene buscador propio — se decidió ponerlo aquí, en el Panel, por ser la
-    única pantalla del lado artesano con una lista real de productos sobre la que buscar.
+    una su propia copia. `HomeArtesanoScreen` en sí (el saludo + el panel de
+    Estadísticas) no tiene buscador propio ni lista de productos — se decidió poner la
+    búsqueda en el Panel, por ser la única pantalla del lado artesano con una lista real
+    de productos sobre la que buscar.
+  - **Panel de Estadísticas** (debajo de Publicar/Ver publicaciones, en el propio
+    `HomeArtesanoScreen`): se calcula sobre **todos** los productos del artesano
+    (`productViewModel.misProductos`, la misma lista que ya carga esta pantalla, sin
+    ninguna consulta nueva) — suma de likes, suma de vistas, activos/total, y el
+    producto más visto y el producto con más likes (miniatura + nombre + el número,
+    tap → `Routes.productDetailRoute`). Si ningún producto tiene vistas ni likes,
+    muestra "Aún no hay actividad" en vez de destacar un producto al azar en el empate
+    en 0. Se refresca junto con el resto del Home al volver a primer plano (mismo
+    `ON_RESUME` que ya usan el Panel de Publicaciones y el Perfil del artesano).
+- **Cambio de modo artesano/cliente**: reemplaza al antiguo ítem "Explorar" del bottom
+  nav de `HomeArtesanoScreen`, que mandaba a `HomeClienteScreen` sin ninguna señal de
+  que se cambió de "identidad" y sin forma clara de volver. Ahora es un toggle
+  ("Artesano"/"Cliente", reutilizando `RolePillToggle` — ver "Diseño y marca") en el
+  encabezado de los dos Home:
+  - En `HomeArtesanoScreen`, tocar "Cliente" navega a `Routes.HOME_CLIENTE` con un
+    `navigate()` normal (`HOME_ARTESANO` se queda debajo en el back stack a propósito).
+  - En `HomeClienteScreen`, el toggle solo aparece si `HomeClienteViewModel.esArtesano`
+    es `true` — se decide leyendo el `rol` real del usuario autenticado en
+    `usuarios/{uid}` (`cargarRolUsuarioActual`, mismo patrón que
+    `HomeArtesanoViewModel.cargarDatosArtesano`), **nunca por la ruta**: un cliente real
+    jamás ve este toggle. Queda fijo antes del buscador (no hace scroll con el feed),
+    así funciona también como indicador persistente de en qué modo está. Tocar
+    "Artesano" limpia todo lo explorado y vuelve a un `HOME_ARTESANO` limpio:
+    ```kotlin
+    navController.navigate(Routes.HOME_ARTESANO) {
+        popUpTo(Routes.HOME_ARTESANO) { inclusive = true }
+        launchSingleTop = true
+    }
+    ```
+  - `ClientProfileScreen` también es consciente del rol: si quien lo abre es un
+    artesano "viendo como cliente", oculta "Historial de compras" (las ventas exigen
+    `rol == "cliente"` en `AuthRepository.obtenerClientes`, así que ahí siempre vería
+    una lista vacía sin motivo claro) y agrega una fila "Cambiar a modo artesano" con
+    la misma navegación de arriba — una salida adicional para cuando llegó a Perfil sin
+    volver a pasar por `HomeClienteScreen` (p. ej. desde Likes). Ninguna otra pantalla
+    alcanzable desde el catálogo (Likes, notificaciones, Detalle, perfil de artesano)
+    necesita ocultarse.
+  - Al iniciar sesión, el artesano siempre entra en modo artesano (`LoginScreen` ya lo
+    manda a `HOME_ARTESANO`) — el modo no se persiste entre sesiones.
 - **Catálogo del cliente** (`HomeClienteScreen` → `HomeClienteViewModel`): barra de
   búsqueda real (el ícono de cámara navega a `Routes.RECOGNITION`, todavía un
-  `PlaceholderScreen` — el reconocimiento visual con OpenCV es de otra fase) y chips de
-  categoría armados dinámicamente a partir de las categorías distintas presentes en los
-  productos cargados, no de una lista fija. El feed (`obtenerTodosLosProductosActivos`)
+  `PlaceholderScreen` — el reconocimiento visual con OpenCV es de otra fase), chips de
+  categoría y, debajo, chips de materia prima — ambos armados dinámicamente a partir de
+  los valores distintos de `categoria`/`materiaPrima` presentes en los productos
+  cargados, no de una lista fija; los tres filtros (categoría, materia prima, texto) se
+  combinan con AND. El feed (`obtenerTodosLosProductosActivos`)
   trae los productos de **todos** los artesanos, a diferencia del Panel de Publicaciones,
   que solo trae los propios; el nombre del artesano de cada tarjeta se resuelve con
   `AuthRepository.obtenerUsuarioPorId`, cacheado por `artesanoId` en el ViewModel para no
@@ -435,7 +676,8 @@ pueda reutilizarse.
   navega a ningún lado, solo hay una barra de búsqueda en esta misma pantalla.
 
   **El buscador filtra de verdad** (`titulo`/`descripcion` de cada producto), combinado
-  con **AND** junto al chip de categoría activo — los dos filtros se aplican en memoria
+  con **AND** junto al chip de categoría y al chip de materia prima activos — los tres
+  filtros se aplican en memoria
   sobre los productos ya cargados, sin ninguna consulta nueva a Firestore por cada tecla:
   Firestore no tiene búsqueda de texto completo nativa y el tamaño del catálogo no
   justifica un servicio externo (Algolia, extensiones, etc.). El texto escrito se
@@ -445,18 +687,28 @@ pueda reutilizarse.
   `java.text.Normalizer` del propio JDK) para que "ceramica" encuentre "Cerámica".
 - **Detalle y contacto** (`ProductDetailScreen` → `ProductDetailViewModel`): encadena dos
   lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
-  `obtenerUsuarioPorId`) porque Firestore no tiene joins. Muestra nombre, precio,
+  `obtenerUsuarioPorId`) porque Firestore no tiene joins. Al cargar el producto,
+  `cargarDetalle` suma 1 a `vistas` (`ProductRepository.incrementarVista`) salvo que
+  quien lo abra sea el propio artesano dueño (en cualquier modo) — un guard en el
+  ViewModel (`vistaContadaPara`, no un `State`) evita contar de nuevo en cada
+  recomposición o rotación, pero sí vuelve a contar si se navega otra vez al mismo
+  producto más tarde (una apertura nueva). La imagen principal es un
+  carrusel (`HorizontalPager`) sobre `producto.imagenes` con puntos de página si hay más de
+  una; tocar la imagen abre un visor en pantalla completa (`Dialog`) que conserva el
+  carrusel y agrega zoom (pinch, 1x–4x) y paneo sobre la imagen ampliada
+  (`detectTransformGestures` + `graphicsLayer`, sin ninguna librería nueva). Muestra nombre, precio,
   categoría, descripción, historia y región del producto, y una fila con el artesano
   (nombre, contacto, insignia RUAC en miniatura si `tieneRuac`) que navega a su
-  `Routes.artisanProfileRoute(artesanoId)`. Dos filas de `ConfianzaDots` para calidad y
-  confianza. El botón "Contactar artesano" usa `contactoPublico` (con `telefono` como
+  `Routes.artisanProfileRoute(artesanoId)`. Dos `BarraValoracion` (calidad y confianza,
+  con degradado de marca y conteo de verificaciones — reemplazan a `ConfianzaDots`,
+  ver "Diseño y marca"). El botón "Contactar artesano" usa `contactoPublico` (con `telefono` como
   respaldo si el artesano no lo configuró), limpia el número a solo dígitos y abre
   `https://wa.me/<numero>?text=<mensaje>` con un intent `ACTION_VIEW`; si no hay ninguna
   app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual.
 - **Perfil del artesano** (`ArtisanProfileScreen` → `ArtisanProfileViewModel`): cabecera
   con el mismo patrón + degradado de Entrada/Login (`PatternBackground`), avatar, chip de
   RUAC, bio y contacto público, estadísticas (cantidad de productos, suma de `likes`),
-  `ConfianzaDots` sobre el promedio de los productos del artesano, y su grilla de
+  `BarraValoracion` sobre el promedio de los productos del artesano, y su grilla de
   productos (`ProductoFeedCard`, compartida con el feed del cliente). Si
   `currentUserId == artesanoId`, aparece un ícono de editar junto al contacto que abre un
   diálogo para actualizar `bio`/`contactoPublico`
@@ -504,6 +756,80 @@ pueda reutilizarse.
   ("¿Eres administrador?"), `AdminRegisterScreen` pide correo, contraseña y un PIN. No pasa
   por el código de verificación de correo de 6 dígitos (a diferencia de cliente/artesano) —
   ver la advertencia de seguridad más abajo para la razón exacta y el trade-off aceptado.
+- **Registrar venta, Valorar compra, Calidad y confianza (Fase 6)**: desde el menú de tres
+  puntos de una fila en `MyProductsScreen`, "Registrar venta" abre `RegisterSaleScreen`
+  con el producto ya elegido (de solo lectura); busca el cliente en memoria por
+  nombre/correo (`AuthRepository.obtenerClientes` + `normalizar()`, mismo criterio que los
+  demás buscadores del proyecto) entre los usuarios con `rol == "cliente"`, elige una
+  fecha (por defecto hoy) y confirma → `SaleRepository.registrarVenta`.
+
+  El cliente ve esa venta en `PurchaseHistoryScreen` (reemplaza el placeholder de
+  "Historial de compras") como "Pendiente de valorar"; al abrirla, `RateSaleScreen` valida
+  que la venta sea suya y que no esté valorada ya (si no, redirige a
+  `ProductDetailScreen` en vez de mostrar el formulario) y pide Calidad y Confianza como
+  dos grillas de 4 pills de selección única — **sin ningún campo de texto**. Al enviar,
+  `SaleRepository.enviarValoracion` hace, en una sola transacción: crea
+  `valoraciones/{ventaId}`, marca `ventas/{ventaId}.valorado = true`, y recalcula la
+  calidad del producto y la confianza del artesano (`artesanoStats`).
+
+  `QualityTrustScreen` (desde el bloque de calidad/confianza en `ProductDetailScreen`, o
+  desde el indicador de confianza en `ArtisanProfileScreen` — en ese caso, como la
+  confianza es del artesano completo y la ruta pide un `productId`, se usa el producto más
+  reciente del artesano solo para tener un id válido; la sección de Confianza es correcta
+  igual, no depende de cuál producto se pasó) muestra, por cada una: "Verificada por N
+  compradores", una barra de nivel (`promedio / 4 * 100%`) y "Nivel: `<etiqueta>`" — o un
+  estado neutro "Aún no hay valoraciones" si el conteo es 0.
+
+  **Corrección de modelo importante**: hasta este ajuste, "confianza" vivía por error en
+  `Product.confianzaPromedio` (nunca se calculó). La confianza es del **artesano**, no del
+  producto — ahora vive en `artesanoStats/{artesanoId}` y se lee así en
+  `ProductoFeedCard`, `ProductDetailScreen` y `ArtisanProfileScreen`. La calidad sí sigue
+  siendo por producto (`Product.calidadPromedio`), sin cambios de fondo, solo se conectó a
+  datos reales.
+
+- **Notificaciones (campana)** (ajuste posterior a la Fase 6, reemplaza la limitación
+  "pull, no push" y generaliza el push que antes solo cubría ventas nuevas): un ícono de
+  campana (`ui/components/IconoNotificaciones.kt`) en el encabezado de
+  `HomeClienteScreen` y `HomeArtesanoScreen` muestra un badge con el número de
+  notificaciones sin leer y abre `NotificationsScreen` (`Routes.NOTIFICATIONS`). Cuatro
+  eventos generan una notificación — ver el detalle de campos y triggers en "Firestore —
+  colección `notificaciones/{autoId}`" (Modelo de datos):
+
+  - **Venta registrada** → avisa al **cliente** (ya existía desde la Fase 6, ahora pasa
+    por la misma colección/helper que los otros tres).
+  - **Valoración recibida** → avisa al **artesano** (antes no tenía ningún aviso de esto).
+  - **Me gusta nuevo** en uno de sus productos → avisa al **artesano**, salvo que se dé
+    like a sí mismo.
+  - **RUAC aprobado/rechazado** → avisa al **artesano**.
+
+  Las cuatro las escriben Cloud Functions (nunca la app — ver la nota de "solo
+  create: if false" en el modelo de datos), a través del helper compartido `avisar()` en
+  `functions/src/index.ts`, que crea el documento en `notificaciones` y, si
+  `usuarios/{destinatarioId}.fcmToken` existe, envía además el push de FCM **solo con
+  `data`** (sin bloque `notification`), para que `MinkaMessagingService.onMessageReceived`
+  se dispare siempre —con la app en primer plano, en segundo plano o cerrada— y construya
+  la notificación del lado de la app de forma consistente (canal `"minka_avisos"`,
+  "Avisos de MinkaArt" — antes se llamaba `"ventas_pendientes"`, ya no exclusivo de
+  ventas; efecto secundario aceptado: a quien ya tenía la app instalada le queda el canal
+  viejo huérfano en los ajustes del sistema hasta que reinstale).
+
+  El token de FCM se guarda/actualiza en `usuarios/{uid}.fcmToken` desde
+  `EfectoNotificaciones` (pide el permiso `POST_NOTIFICATIONS` en Android 13+, obtiene el
+  token de `FirebaseMessaging.getInstance().token`), llamado desde `HomeClienteScreen` y
+  `HomeArtesanoScreen`, y también desde `MinkaMessagingService.onNewToken` si el token
+  rota. Tocar el push abre la pantalla correspondiente directamente: `MainActivity`
+  (`android:launchMode="singleTop"`) lee los extras `tipo`/`referenciaId` del `Intent` (en
+  `onCreate` y en `onNewIntent`, según si la app ya estaba abierta) y se los pasa a
+  `AppNavigation`, que resuelve la ruta con `Routes.rutaDeNotificacion(tipo,
+  referenciaId)` — la misma tabla que usa `NotificationsScreen` al tocar una fila, para no
+  repetirla en dos sitios — y navega una sola vez por cada par nuevo. Tocar una fila
+  dentro de `NotificationsScreen` hace lo mismo, además de marcar esa notificación como
+  leída (`NotificationRepository.marcarComoLeida`); "Marcar todas" hace lo mismo en lote
+  sobre todas las no leídas. El badge de la campana se refresca al volver a primer plano
+  (mismo patrón `ON_RESUME` que ya usan `MyProductsScreen`/`ArtisanProfileScreen`), así se
+  ve al día sin reabrir la app. **Límite aceptado**: si la sesión de Firebase Auth ya
+  había expirado al tocar el push, el deep link falla silenciosamente — no hay un flujo
+  de "inicia sesión y continúa" para este caso.
 
 ## Diseño y marca
 
@@ -524,6 +850,22 @@ archivo). `MinkaArt_btaTheme` sigue forzando `darkTheme = false` a propósito: l
 pantallas no se han revisado en modo oscuro. El color dinámico (Material You) sigue
 desactivado deliberadamente para no reemplazar la paleta de marca por los colores del
 fondo de pantalla del usuario.
+
+`RolePillToggle.kt` (Registro) ahora acepta 5 parámetros de color opcionales, con los
+valores originales como default (cero cambio de comportamiento ahí) — el toggle de
+cambio de modo de `HomeArtesanoScreen`/`HomeClienteScreen` lo reutiliza pasándole la
+misma pareja de colores que ya usan los chips de categoría en todo el proyecto (activo:
+fondo `Borgona` + texto `Marfil`; inactivo: fondo blanco + `TextoSecundario`), en vez de
+duplicar el patrón de "pills" con un componente nuevo.
+
+El bloque de Calidad/Confianza (`ui/components/BarraValoracion.kt`, ajuste posterior a la
+Fase 6) reemplazó a `ConfianzaDots` (4 puntos sólidos): ahora es una barra con degradado
+`Guinda → Borgona → AzulAcero` sobre una pista gris, con la etiqueta y el conteo de
+verificaciones ("N verificaciones" / "Sin verificaciones") arriba — usado en
+`ProductDetailScreen` y `ArtisanProfileScreen`; `ProductoFeedCard` usa la variante
+compacta `BarraValoracionCompacta` (solo la barra, sin texto, para no hacer crecer la
+tarjeta). `QualityTrustScreen` queda fuera de este rediseño a propósito y conserva su
+barra plana + "Nivel: `<etiqueta>`".
 
 `Type.kt` usa **Fraunces** (titulares, saludos, logotipo) y **Plus Jakarta Sans**
 (interfaz) como fuentes reales, no como sustitutos temporales. Google Fonts no distribuye
@@ -617,18 +959,50 @@ Detalle de la configuración en `functions/SETUP.md`.
   el código (`RegisterViewModel.iniciarRegistro` + `confirmarCodigoDeVerificacion`,
   `AuthRepository.enviarCodigoVerificacion` / `verificarCodigo` sobre las Cloud
   Functions `enviarCodigoVerificacion` / `verificarCodigo`).
-- El artesano puede explorar el catálogo general (mismo feed que ve un cliente) desde
-  "Explorar" en su propio bottom nav, y busca dentro de su propio catálogo con chips de
-  categoría + texto en el Panel de Publicaciones — misma lógica de filtro que
-  `HomeClienteScreen`, compartida vía `util/Texto.kt` (Ajustes 2). `LikesScreen` ya abre
-  sin `PERMISSION_DENIED`: hacía falta una regla de Firestore aparte para la consulta
-  `collectionGroup("likes")` (ver la colección `productos/{autoId}/likes/{uid}` más
-  arriba para el detalle exacto).
+- El artesano puede pasar a "modo cliente" con el toggle del encabezado de su Home
+  (mismo feed que ve un cliente, con el indicador persistente para volver — ver "Cambio
+  de modo artesano/cliente" en Flujos principales), y busca dentro de su propio
+  catálogo con chips de categoría + texto en el Panel de Publicaciones — misma lógica de
+  filtro que `HomeClienteScreen`, compartida vía `util/Texto.kt` (Ajustes 2).
+  `LikesScreen` ya abre sin `PERMISSION_DENIED`: hacía falta una regla de Firestore
+  aparte para la consulta `collectionGroup("likes")` (ver la colección
+  `productos/{autoId}/likes/{uid}` más arriba para el detalle exacto).
+- Panel de Estadísticas en `HomeArtesanoScreen` (likes/vistas totales, activos/total,
+  producto más visto y con más likes) y conteo real de `vistas` al abrir
+  `ProductDetailScreen` — ver "Cambio de modo artesano/cliente" y "Detalle y contacto"
+  en Flujos principales.
 - El RUAC ahora sí se verifica de verdad (Fase 5): solicitud del artesano
   (`RequestRuacScreen`), cola de revisión y aprobación/rechazo por un tercer rol,
   `"administrador"` (`AdminRuacListScreen`/`AdminRuacReviewScreen`), e insignia real
   (`RuacBadgeScreen`) — ver "Insignia RUAC" en Flujos principales y la nota de migración
-  en el modelo de datos de `usuarios`.
+  en el modelo de datos de `usuarios`. Un RUAC ya verificado se puede editar (vuelve a
+  quedar pendiente de revisión) o eliminar (el artesano lo retira sin pasar por revisión) —
+  ver "RUAC editable/eliminable" en el modelo de `usuarios`.
+- El formulario de Publicar/Editar producto reemplazó "Región de origen" y "Categoría" en
+  texto libre por selectores estructurados: Departamento + Municipio, una categoría curada
+  de 16 opciones (con "Otros" pidiendo texto libre aparte) y una Clasificación opcional —
+  ver `CatalogosProducto` y la nota de migración de `regionOrigen` en el modelo de
+  `productos`.
+- Registrar venta, Valorar compra y Calidad y confianza (Fase 6): el artesano registra una
+  venta a un cliente real, el cliente la valora con pills (sin texto libre) y eso alimenta
+  la calidad real de cada producto y la confianza real de cada artesano — ver "Registrar
+  venta, Valorar compra, Calidad y confianza" en Flujos principales. Corrige además un
+  error de modelo de fases anteriores: la confianza vivía por error en
+  `Product.confianzaPromedio`, ahora vive en `artesanoStats/{artesanoId}` (es del
+  artesano, no del producto).
+- El cliente recibe una notificación push del sistema cuando un artesano le registra una
+  venta, con deep link directo a `RateSaleScreen` de esa venta. De paso se corrigió un
+  `PERMISSION_DENIED` real al enviar una valoración (ver la nota en el modelo de
+  `productos`/`ventas`/`valoraciones`).
+- Campana de notificaciones (ajuste posterior a la Fase 6) en el encabezado de
+  `HomeClienteScreen`/`HomeArtesanoScreen`, con badge de no leídas y centro de
+  notificaciones real (`NotificationsScreen`): venta registrada, valoración recibida, me
+  gusta nuevo y RUAC aprobado/rechazado generan un aviso — ver "Notificaciones (campana)"
+  en Flujos principales.
+- Rediseño de Calidad y Confianza (ajuste posterior a la Fase 6): barras con degradado de
+  marca y conteo de verificaciones (`BarraValoracion`/`BarraValoracionCompacta`)
+  reemplazan a los 4 puntos de `ConfianzaDots` en Detalle de producto, Perfil del artesano
+  y la tarjeta del feed — ver "Diseño y marca".
 
 **Pendiente / placeholder**
 - `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
@@ -641,6 +1015,11 @@ Detalle de la configuración en `functions/SETUP.md`.
 - No existe ningún campo de foto de perfil (`fotoUrl` o similar) ni flujo de subida de
   imagen de perfil — el avatar de `ClientProfileScreen` y `ArtisanProfileScreen` siempre
   muestra un ícono por defecto.
+- `QualityTrustScreen` no se actualizó al rediseño de Calidad/Confianza (decisión de
+  alcance): sigue con su barra plana + "Nivel: `<etiqueta>`", no usa `BarraValoracion`.
+- El canal de notificaciones se renombró de `"ventas_pendientes"` a `"minka_avisos"` al
+  generalizarlo a los cuatro tipos de aviso; quien ya tenía la app instalada conserva el
+  canal viejo huérfano en los ajustes del sistema hasta que reinstale.
 - "Información básica" del cliente solo permite editar `nombre` — el correo está atado a
   la identidad de Firebase Auth y cambiarlo requeriría un flujo de reautenticación, fuera
   de alcance.
@@ -654,14 +1033,12 @@ Detalle de la configuración en `functions/SETUP.md`.
 - `ProductRepository.eliminarProducto()` borra el documento en Firestore pero no la imagen
   asociada en Storage — queda huérfana. No se pidió limpiarla y ninguna otra función del
   proyecto lo hace tampoco hoy.
-- La región de origen sigue siendo un campo de texto libre (en Publicar y Editar); el
-  mockup la dibuja como un selector, pero no hay ninguna lista de regiones definida en el
-  proyecto. Lo mismo aplica a `categoria`: es texto libre, sin una taxonomía fija.
-- `vistas` se queda en 0: no hay pantalla que registre visitas a un producto. `likes` sí es
-  real (el corazón del feed y del Detalle lo incrementan/decrementan de verdad).
-- `calidadPromedio`/`confianzaPromedio` existen en el modelo pero nunca se calculan — la
-  UI los muestra como "sin valoraciones aún" (puntos grises) hasta que exista la fase de
-  "Valorar compra".
+- El municipio de origen sigue siendo texto libre (no hay una lista completa de los ~1100
+  municipios de Colombia dentro de la app); el departamento y la categoría ya son
+  selectores de una lista fija (`CatalogosProducto`) desde el ajuste posterior a la Fase 5.
+- El deep link de la notificación de venta nueva no encadena un login si la sesión de
+  Firebase Auth ya había expirado al tocar la notificación — ver "Notificación push de
+  venta nueva" en Flujos principales.
 - Las reglas de Firestore que abren la lectura de `usuarios/{uid}` a cualquier usuario
   autenticado (ver Modelo de datos) siguen con el mismo trade-off de privacidad aceptado
   en la Fase 3.

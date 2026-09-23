@@ -4,10 +4,15 @@ import android.net.Uri
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.minkaart2.app.data.CatalogosProducto
 import com.minkaart2.app.data.model.Product
 import com.minkaart2.app.repository.ProductRepository
 
 class ProductViewModel : ViewModel() {
+
+    companion object {
+        const val MAX_IMAGENES = 15
+    }
 
     private val productRepository = ProductRepository()
 
@@ -24,7 +29,12 @@ class ProductViewModel : ViewModel() {
         descripcion: String,
         precio: Long,
         historiaProceso: String,
-        regionOrigen: String,
+        materiaPrima: String,
+        materiaPrimaOtro: String,
+        departamento: String,
+        municipio: String,
+        categoria: String,
+        categoriaOtro: String,
         onError: (String) -> Unit
     ): Boolean {
 
@@ -48,8 +58,33 @@ class ProductViewModel : ViewModel() {
             return false
         }
 
-        if (regionOrigen.isBlank()) {
-            onError("Ingresa la región de origen")
+        if (materiaPrima.isBlank()) {
+            onError("Selecciona la materia prima")
+            return false
+        }
+
+        if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA && materiaPrimaOtro.isBlank()) {
+            onError("Especifica la materia prima en \"Especifica cuál\"")
+            return false
+        }
+
+        if (departamento.isBlank()) {
+            onError("Selecciona el departamento de origen")
+            return false
+        }
+
+        if (municipio.isBlank()) {
+            onError("Ingresa el municipio de origen")
+            return false
+        }
+
+        if (categoria.isBlank()) {
+            onError("Selecciona una categoría")
+            return false
+        }
+
+        if (categoria == CatalogosProducto.CATEGORIA_OTROS && categoriaOtro.isBlank()) {
+            onError("Especifica la categoría en \"Especifica cuál\"")
             return false
         }
 
@@ -61,9 +96,14 @@ class ProductViewModel : ViewModel() {
         descripcion: String,
         precio: Long,
         historiaProceso: String,
-        regionOrigen: String,
+        materiaPrima: String,
+        materiaPrimaOtro: String,
+        departamento: String,
+        municipio: String,
         categoria: String,
-        imagenUri: Uri?,
+        categoriaOtro: String,
+        clasificacion: String?,
+        imagenesUris: List<Uri>,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -73,7 +113,12 @@ class ProductViewModel : ViewModel() {
             descripcion = descripcion,
             precio = precio,
             historiaProceso = historiaProceso,
-            regionOrigen = regionOrigen,
+            materiaPrima = materiaPrima,
+            materiaPrimaOtro = materiaPrimaOtro,
+            departamento = departamento,
+            municipio = municipio,
+            categoria = categoria,
+            categoriaOtro = categoriaOtro,
             onError = onError
         )
 
@@ -81,9 +126,29 @@ class ProductViewModel : ViewModel() {
             return
         }
 
-        if (imagenUri == null) {
-            onError("Debes seleccionar una imagen del producto")
+        if (imagenesUris.isEmpty()) {
+            onError("Debes seleccionar al menos una imagen del producto")
             return
+        }
+
+        if (imagenesUris.size > MAX_IMAGENES) {
+            onError("Puedes subir un máximo de $MAX_IMAGENES imágenes")
+            return
+        }
+
+        // categoriaOtro/materiaPrimaOtro solo tienen sentido junto a su opción "Otro(a)"
+        // — se descarta cualquier texto que haya quedado de un cambio de selección
+        // anterior.
+        val categoriaOtroFinal = if (categoria == CatalogosProducto.CATEGORIA_OTROS) {
+            categoriaOtro.trim()
+        } else {
+            null
+        }
+
+        val materiaPrimaOtroFinal = if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA) {
+            materiaPrimaOtro.trim()
+        } else {
+            null
         }
 
         val producto = Product(
@@ -91,13 +156,18 @@ class ProductViewModel : ViewModel() {
             descripcion = descripcion,
             precio = precio,
             historiaProceso = historiaProceso,
-            regionOrigen = regionOrigen,
-            categoria = categoria.trim()
+            materiaPrima = materiaPrima,
+            materiaPrimaOtro = materiaPrimaOtroFinal,
+            departamento = departamento,
+            municipio = municipio,
+            categoria = categoria.trim(),
+            categoriaOtro = categoriaOtroFinal,
+            clasificacion = clasificacion
         )
 
-        productRepository.guardarProductoConImagen(
+        productRepository.guardarProductoConImagenes(
             producto = producto,
-            imagenUri = imagenUri,
+            imagenesUris = imagenesUris,
             onSuccess = onSuccess,
             onError = onError
         )
@@ -143,9 +213,15 @@ class ProductViewModel : ViewModel() {
         descripcion: String,
         precio: Long,
         historiaProceso: String,
-        regionOrigen: String,
+        materiaPrima: String,
+        materiaPrimaOtro: String,
+        departamento: String,
+        municipio: String,
         categoria: String,
-        nuevaImagenUri: Uri?,
+        categoriaOtro: String,
+        clasificacion: String?,
+        imagenesExistentes: List<String>,
+        imagenesNuevasUris: List<Uri>,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -155,7 +231,12 @@ class ProductViewModel : ViewModel() {
             descripcion = descripcion,
             precio = precio,
             historiaProceso = historiaProceso,
-            regionOrigen = regionOrigen,
+            materiaPrima = materiaPrima,
+            materiaPrimaOtro = materiaPrimaOtro,
+            departamento = departamento,
+            municipio = municipio,
+            categoria = categoria,
+            categoriaOtro = categoriaOtro,
             onError = onError
         )
 
@@ -163,22 +244,53 @@ class ProductViewModel : ViewModel() {
             return
         }
 
+        val totalImagenes = imagenesExistentes.size + imagenesNuevasUris.size
+
+        if (totalImagenes == 0) {
+            onError("Debes conservar o agregar al menos una imagen del producto")
+            return
+        }
+
+        if (totalImagenes > MAX_IMAGENES) {
+            onError("Puedes tener un máximo de $MAX_IMAGENES imágenes")
+            return
+        }
+
+        val categoriaOtroFinal = if (categoria == CatalogosProducto.CATEGORIA_OTROS) {
+            categoriaOtro.trim()
+        } else {
+            null
+        }
+
+        val materiaPrimaOtroFinal = if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA) {
+            materiaPrimaOtro.trim()
+        } else {
+            null
+        }
+
         // .copy() sobre el producto original: conserva vistas, likes, activo,
-        // fechaPublicacion, calidadPromedio/confianzaPromedio e imagenes tal cual, y solo
-        // reemplaza los campos que el formulario de edición sí controla.
+        // fechaPublicacion, calidadPromedio/confianzaPromedio, imagenes y regionOrigen
+        // (heredado, ver Product.kt) tal cual, y solo reemplaza los campos que el
+        // formulario de edición sí controla.
         val producto = productoOriginal.copy(
             nombre = nombre,
             descripcion = descripcion,
             precio = precio,
             historiaProceso = historiaProceso,
-            regionOrigen = regionOrigen,
-            categoria = categoria.trim()
+            materiaPrima = materiaPrima,
+            materiaPrimaOtro = materiaPrimaOtroFinal,
+            departamento = departamento,
+            municipio = municipio,
+            categoria = categoria.trim(),
+            categoriaOtro = categoriaOtroFinal,
+            clasificacion = clasificacion
         )
 
         productRepository.actualizarProducto(
             productoId = productoOriginal.id,
             producto = producto,
-            nuevaImagenUri = nuevaImagenUri,
+            imagenesExistentes = imagenesExistentes,
+            imagenesNuevasUris = imagenesNuevasUris,
             onSuccess = onSuccess,
             onError = onError
         )

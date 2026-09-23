@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -84,7 +85,8 @@ private val LineSoft = Color(0xFFEFE6E8)
 @Composable
 fun MyProductsScreen(
     onEditarProducto: (String) -> Unit,
-    onNuevoProducto: () -> Unit
+    onNuevoProducto: () -> Unit,
+    onRegistrarVenta: (String) -> Unit
 ) {
 
     val productViewModel: ProductViewModel = viewModel()
@@ -384,6 +386,7 @@ fun MyProductsScreen(
                         producto = producto,
                         onEditar = { onEditarProducto(producto.id) },
                         onEliminar = { productoAEliminar = producto },
+                        onRegistrarVenta = { onRegistrarVenta(producto.id) },
                         onCambiarEstado = { nuevoActivo ->
 
                             productViewModel.cambiarEstadoProducto(
@@ -460,6 +463,7 @@ private fun ProductRow(
     producto: Product,
     onEditar: () -> Unit,
     onEliminar: () -> Unit,
+    onRegistrarVenta: () -> Unit,
     onCambiarEstado: (Boolean) -> Unit
 ) {
 
@@ -571,6 +575,17 @@ private fun ProductRow(
                         onClick = {
                             menuAbierto = false
                             onEditar()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = { Text("Registrar venta") },
+                        leadingIcon = {
+                            Icon(Icons.Filled.ShoppingCart, contentDescription = null)
+                        },
+                        onClick = {
+                            menuAbierto = false
+                            onRegistrarVenta()
                         }
                     )
 
