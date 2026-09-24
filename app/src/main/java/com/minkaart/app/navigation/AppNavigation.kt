@@ -11,6 +11,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.minkaart2.app.ui.admin.AdminRegisterScreen
 import com.minkaart2.app.ui.admin.AdminRuacListScreen
 import com.minkaart2.app.ui.admin.AdminRuacReviewScreen
+import com.minkaart2.app.ui.admin.AdminVisualEvalScreen
 import com.minkaart2.app.ui.components.PlaceholderScreen
 import com.minkaart2.app.ui.home.HomeArtesanoScreen
 import com.minkaart2.app.ui.home.HomeClienteScreen
@@ -23,6 +24,7 @@ import com.minkaart2.app.ui.profile.LikesScreen
 import com.minkaart2.app.ui.profile.ProfileScreen
 import com.minkaart2.app.ui.publication.EditProductScreen
 import com.minkaart2.app.ui.publication.PublicationScreen
+import com.minkaart2.app.ui.recognition.RecognitionScreen
 import com.minkaart2.app.ui.register.RegisterScreen
 import com.minkaart2.app.ui.ruac.RequestRuacScreen
 import com.minkaart2.app.ui.ruac.RuacBadgeScreen
@@ -187,7 +189,7 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
         }
 
         composable(Routes.RECOGNITION) {
-            PlaceholderScreen(titulo = "Reconocimiento visual por cámara")
+            RecognitionScreen(navController = navController)
         }
 
         composable(
@@ -248,6 +250,10 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
 
         composable(Routes.REQUEST_RUAC) {
             RequestRuacScreen(navController)
+        }
+
+        composable(Routes.ADMIN_VISUAL_EVAL) {
+            AdminVisualEvalScreen(navController)
         }
 
         // =========================

@@ -62,7 +62,9 @@ import com.minkaart2.app.ui.components.EfectoNotificaciones
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.IconoNotificaciones
 import com.minkaart2.app.ui.components.OutlineButton
+import com.minkaart2.app.repository.VisualSearchRepository
 import com.minkaart2.app.ui.components.RolePillToggle
+import com.minkaart2.app.vision.GeneradorHuellas
 import com.minkaart2.app.viewModel.HomeArtesanoViewModel
 import com.minkaart2.app.viewModel.NotificationsViewModel
 import com.minkaart2.app.viewModel.ProductViewModel
@@ -86,12 +88,36 @@ fun HomeArtesanoScreen(
     val notificationsViewModel: NotificationsViewModel = viewModel()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val visualSearchRepository = remember { VisualSearchRepository() }
+    val generadorHuellas = remember { GeneradorHuellas(visualSearchRepository) }
 
     EfectoNotificaciones()
 
     val nombreArtesano by homeViewModel.nombreArtesano
     val productos by productViewModel.misProductos
     val noLeidas by notificationsViewModel.noLeidas
+
+    // Autocompletado silencioso (sin barra de progreso): detecta los productos propios
+    // sin huella visual (o con una versión vieja) y las calcula en segundo plano — así
+    // ningún producto propio queda por fuera de la búsqueda visual. Se reintenta tanto
+    // al entrar por primera vez como en cada ON_RESUME (no solo la primera vez): si
+    // algo falló la vez anterior (por ejemplo, las reglas de Firestore aún no estaban
+    // desplegadas), reabrir esta pantalla sin cerrar el proceso también lo reintenta.
+    val autocompletarHuellas: (List<Product>) -> Unit = { productos ->
+
+        visualSearchRepository.obtenerVersiones(
+            onSuccess = { versiones ->
+
+                generadorHuellas.procesarPendientes(
+                    productos = productos,
+                    versionesExistentes = versiones,
+                    onProgreso = { _, _ -> },
+                    onCompletado = { _, _, _ -> }
+                )
+            },
+            onError = { /* si falla, simplemente no se autocompleta esta vez */ }
+        )
+    }
 
     LaunchedEffect(Unit) {
 
@@ -102,7 +128,8 @@ fun HomeArtesanoScreen(
         productViewModel.cargarMisProductos(
             onError = { mensaje ->
                 Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
-            }
+            },
+            onSuccess = autocompletarHuellas
         )
 
         notificationsViewModel.cargar(
@@ -125,7 +152,8 @@ fun HomeArtesanoScreen(
                 // Refresca el panel de Estadísticas (likes/vistas pueden haber
                 // cambiado mientras el artesano no estaba en esta pantalla).
                 productViewModel.cargarMisProductos(
-                    onError = { /* si falla el refresco silencioso, se deja tal cual */ }
+                    onError = { /* si falla el refresco silencioso, se deja tal cual */ },
+                    onSuccess = autocompletarHuellas
                 )
             }
         }

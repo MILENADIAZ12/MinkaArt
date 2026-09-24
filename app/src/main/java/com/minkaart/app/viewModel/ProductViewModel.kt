@@ -1,12 +1,15 @@
 package com.minkaart2.app.viewModel
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import com.minkaart2.app.data.CatalogosProducto
 import com.minkaart2.app.data.model.Product
 import com.minkaart2.app.repository.ProductRepository
+import com.minkaart2.app.repository.VisualSearchRepository
+import com.minkaart2.app.vision.GeneradorHuellas
 
 class ProductViewModel : ViewModel() {
 
@@ -15,6 +18,28 @@ class ProductViewModel : ViewModel() {
     }
 
     private val productRepository = ProductRepository()
+    private val visualSearchRepository = VisualSearchRepository()
+    private val generadorHuellas = GeneradorHuellas(visualSearchRepository)
+
+    /**
+     * Calcula y guarda la huella visual de un producto recién publicado o editado, en
+     * segundo plano — si falla, el producto se publica/actualiza igual (ver
+     * MotorHuellaVisual/GeneradorHuellas), solo se registra el error.
+     */
+    private fun generarHuellaEnSegundoPlano(producto: Product) {
+
+        generadorHuellas.procesarPendientes(
+            productos = listOf(producto),
+            versionesExistentes = emptyMap(),
+            onProgreso = { _, _ -> },
+            onCompletado = { _, fallidas, _ ->
+
+                if (fallidas > 0) {
+                    Log.w("ProductViewModel", "No se pudo generar la huella visual de ${producto.id}")
+                }
+            }
+        )
+    }
 
     // Lista de publicaciones del artesano actual
     private val _misProductos = mutableStateOf<List<Product>>(emptyList())
@@ -168,13 +193,17 @@ class ProductViewModel : ViewModel() {
         productRepository.guardarProductoConImagenes(
             producto = producto,
             imagenesUris = imagenesUris,
-            onSuccess = onSuccess,
+            onSuccess = { productoGuardado ->
+                generarHuellaEnSegundoPlano(productoGuardado)
+                onSuccess()
+            },
             onError = onError
         )
     }
 
     fun cargarMisProductos(
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onSuccess: (List<Product>) -> Unit = {}
     ) {
 
         _cargando.value = true
@@ -184,6 +213,7 @@ class ProductViewModel : ViewModel() {
 
                 _misProductos.value = productos
                 _cargando.value = false
+                onSuccess(productos)
             },
 
             onError = { mensaje ->
@@ -291,7 +321,16 @@ class ProductViewModel : ViewModel() {
             producto = producto,
             imagenesExistentes = imagenesExistentes,
             imagenesNuevasUris = imagenesNuevasUris,
-            onSuccess = onSuccess,
+            onSuccess = { productoActualizado ->
+
+                // Solo recalcula la huella si las imágenes de verdad cambiaron — editar
+                // solo el precio o la descripción no debe volver a procesar imágenes.
+                if (productoActualizado.imagenes != productoOriginal.imagenes) {
+                    generarHuellaEnSegundoPlano(productoActualizado)
+                }
+
+                onSuccess()
+            },
             onError = onError
         )
     }
@@ -309,6 +348,16 @@ class ProductViewModel : ViewModel() {
                 _misProductos.value = _misProductos.value.filterNot { producto ->
                     producto.id == productoId
                 }
+
+                // Best-effort: si el producto nunca tuvo huella, Firestore niega el
+                // delete sobre un documento que no existe (mismo tipo de error de
+                // evaluación ya documentado para productoBaseIgual) — se ignora, es un
+                // caso normal, no debe afectar el resultado del borrado del producto.
+                visualSearchRepository.eliminarHuella(
+                    productId = productoId,
+                    onSuccess = {},
+                    onError = {}
+                )
 
                 onSuccess()
             },

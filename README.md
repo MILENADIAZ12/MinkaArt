@@ -37,15 +37,46 @@ verifica de ninguna forma.
 | Notificaciones push | Firebase Cloud Messaging (`firebase-messaging`, BoM) | 33.10.0 |
 | Envío de correo | nodemailer (SMTP de Gmail, en Cloud Functions) | 6.9.15 |
 | Carga de imágenes | Coil (`coil-compose`) | 2.7.0 |
+| Reconocimiento visual — preprocesamiento en el dispositivo | OpenCV (`org.opencv:opencv`, Maven Central, sin ML Kit) — CLAHE para poca luz, detección de foto borrosa/muy oscura (varianza del Laplaciano / brillo medio), recorte manual antes de enviar la foto (`vision/PreprocesadorImagen.kt`) | 4.10.0 |
+| Reconocimiento visual — embeddings de imagen (búsqueda real) | Google Cloud Vertex AI, modelo `multimodalembedding@001` (1408 dimensiones, ya normalizado a norma 1 — verificado con una llamada real), región `us-central1`, llamado desde Cloud Functions (nunca desde el dispositivo) | — |
+| Reconocimiento visual — comparación (búsqueda real) | Firestore vector search (`Query.findNearest`, `DOT_PRODUCT`) sobre la colección `embeddingsVisuales`, con índice vectorial dedicado | — |
+| Reconocimiento visual — motor anterior (en transición, ver "Estado actual y pendientes") | MediaPipe Tasks Vision (`com.google.mediapipe:tasks-vision`, Image Embedder con MobileNet-V3 Large) + OpenCV/ORB — **ya no participan en la búsqueda real** de `RecognitionScreen`; siguen solo como línea base de comparación en "Evaluar búsqueda visual" (solo administrador), pendientes de eliminar tras confirmar esa comparación con fotos reales | 1.0.0 |
+| Cámara | CameraX (`camera-core`/`camera-camera2`/`camera-lifecycle`/`camera-view`) | 1.6.2 |
 | `minSdk` / `targetSdk` / `compileSdk` | — | 31 / 36 / 36 |
 | JVM target | — | 11 |
 
+`app/build.gradle.kts` filtra los binarios nativos de OpenCV y de MediaPipe a
+`arm64-v8a` y `x86_64` (`ndk { abiFilters }`); además `androidResources { noCompress +=
+"tflite" }` deja el modelo sin comprimir en el APK (MediaPipe necesita mapearlo en
+memoria tal cual, comprimido falla al abrirlo). Es una combinación pesada: un APK de
+debug limpio (sin filtro de ABI) llegaba a ~112 MB solo con OpenCV (4 ABIs); filtrado a
+2 ABIs quedaba en ~55-60 MB; con MediaPipe + el modelo agregados, el mismo APK de debug
+filtrado a 2 ABIs mide **~158 MB** (medido en esta sesión) — el modelo (10,9 MB) y
+`libmediapipe_tasks_jni.so` (~11 MB en arm64-v8a, ~13,7 MB en x86_64) explican parte del
+salto, pero la mayor parte es el árbol de dependencias Java de `tasks-core` (Guava
+completo, `protobuf-javalite`, Flogger, `com.google.android.datatransport`), que infla
+bastante los `.dex`. Si el peso del APK es un problema real, la alternativa más simple es
+cambiar `MotorHuellaVisual.MODELO_EMBEDDER` a `mobilenet_v3_small.tflite` (agregar ese
+archivo a `assets/` y subir `VERSION_HUELLA`) — el modelo en sí pesa menos (~4 MB), pero
+no reduce el peso de las dependencias Java de MediaPipe, que es la parte más grande.
+**Este peso es temporal**: MediaPipe/OpenCV-matching ya no participan en la búsqueda
+real (ver "Búsqueda visual" en Flujos principales) y están pendientes de eliminar del
+todo (con eso baja también el APK) en cuanto se confirme la comparación de la Fase 4
+con fotos reales — ver "Estado actual y pendientes".
+
 Proyecto Firebase: `minka-art` (bucket de Storage `minka-art.firebasestorage.app`),
 configurado en `app/google-services.json`, que está versionado en el repositorio.
+Además de Firebase, el proyecto usa **Google Cloud Vertex AI** (mismo proyecto
+`minka-art`, plan de facturación Blaze) para los embeddings de imagen de la búsqueda
+visual — ver "Configuración de Google Cloud (búsqueda visual)" más abajo para el
+detalle exacto de lo que hay que habilitar/configurar.
 
 Además del proyecto Android, el repositorio incluye `functions/`: un backend de Cloud
-Functions en Node.js + TypeScript (`onCall`, v2) que genera y valida el código de
-verificación de correo y lo envía por el SMTP de Gmail con [nodemailer](https://nodemailer.com). Ver
+Functions en Node.js + TypeScript (`onCall`/`onDocumentWritten`, v2) que genera y valida
+el código de verificación de correo y lo envía por el SMTP de Gmail con
+[nodemailer](https://nodemailer.com), y que además calcula los embeddings de la búsqueda
+visual con Vertex AI (`google-auth-library`) y los compara con Firestore vector search
+(`@google-cloud/firestore`, empaquetado dentro de `firebase-admin`). Ver
 [Modelo de datos](#modelo-de-datos) y [Flujos principales](#flujos-principales).
 
 ## Arquitectura
@@ -58,6 +89,7 @@ no corrutinas ni `Flow` — es la convención del proyecto, ver `CLAUDE.md`.
 MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
     Screen (Compose)  →  ViewModel  →  Repository  →  Firebase (Auth / Firestore / Storage)
                                                     →  Cloud Functions → Firestore / Gmail SMTP
+                                                                       → Vertex AI (búsqueda visual)
 ```
 
 | Capa | Paquete | Responsabilidad |
@@ -69,7 +101,7 @@ MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
 | Datos | `com.minkaart2.app.repository` | Llamadas directas a Firebase Auth/Firestore/Storage, y a las Cloud Functions de verificación de correo (`AuthRepository.enviarCodigoVerificacion` / `verificarCodigo`). |
 | Modelo | `com.minkaart2.app.data.model` | `data class` que se serializan/deserializan con Firestore. |
 | Tema | `com.minkaart2.app.ui.theme` | Paleta de marca, tipografía, `MaterialTheme`. |
-| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. Además, cuatro triggers de Firestore (`notificarNuevaVenta`, `notificarNuevaValoracion`, `notificarLikeNuevo`, `notificarCambioRuac`) escriben en `notificaciones` y envían el push de FCM. |
+| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. Cuatro triggers de Firestore (`notificarNuevaVenta`, `notificarNuevaValoracion`, `notificarLikeNuevo`, `notificarCambioRuac`) escriben en `notificaciones` y envían el push de FCM. Para la búsqueda visual: `sincronizarEmbeddingVisual` (trigger en `productos/{productId}`) calcula el embedding con Vertex AI y lo guarda en `embeddingsVisuales`, y `buscarPorImagen` (callable) hace la búsqueda real con Firestore `findNearest` — ver Modelo de datos y "Búsqueda visual". |
 
 ## Estructura del proyecto
 
@@ -79,14 +111,21 @@ MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
 > también por nombre de paquete.
 
 ```
-app/src/main/java/com/minkaart/app/
-├── MainActivity.kt
+app/src/main/
+├── assets/
+│   └── mobilenet_v3_large.tflite # modelo del Image Embedder de MediaPipe (ver Stack técnico)
+└── java/com/minkaart/app/
+├── MainActivity.kt              # MotorHuellaVisual.inicializar(applicationContext) aquí
 ├── data/
 │   ├── CatalogosProducto.kt # departamentos, categorías, materias primas y clasificaciones
 │   │                         # de Publicar/Editar producto (listas fijas, compartidas)
 │   ├── EscalaValoracion.kt  # niveles de calidad/confianza <-> puntos <-> etiqueta (Fase 6)
 │   └── model/
 │       ├── ArtesanoStats.kt # documento de "artesanoStats" — confianza del artesano
+│       ├── HuellaVisual.kt # documento de "huellasVisuales" — motor ANTERIOR de
+│       │                     # reconocimiento visual, en transición (ver Stack técnico
+│       │                     # y "Estado actual y pendientes"); ya no lo usa la
+│       │                     # búsqueda real, solo "Evaluar búsqueda visual"
 │       ├── Notificacion.kt # documento de "notificaciones" — solo lo escriben Cloud Functions
 │       ├── Product.kt      # documento de la colección "productos"
 │       ├── User.kt          # documento de la colección "usuarios"
@@ -98,8 +137,24 @@ app/src/main/java/com/minkaart/app/
 ├── repository/
 │   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos de usuarios, actualizar campos, cerrar sesión
 │   ├── NotificationRepository.kt # leer notificaciones y marcarlas como leídas (nunca las crea)
-│   └── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
+│   ├── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
+│   └── VisualSearchRepository.kt # CRUD de "huellasVisuales" — motor ANTERIOR, en
+│                                   # transición, solo lo lee "Evaluar búsqueda visual"
+├── vision/
+│   ├── PreprocesadorImagen.kt # NUEVO — CLAHE (poca luz), rechaza fotos borrosas/muy
+│   │                           # oscuras, redimensiona y da el JPEG que se manda a
+│   │                           # buscarPorImagen (Cloud Functions). Es lo único de
+│   │                           # vision/ que usa la búsqueda real hoy
+│   ├── MotorHuellaVisual.kt   # Motor ANTERIOR (en transición): ORB + histograma HSV
+│   │                           # (comparar()/puntajeOrb()) + embedding de MediaPipe
+│   │                           # Image Embedder (similitudCoseno()) — ya no lo usa
+│   │                           # RecognitionScreen, solo AdminVisualEvalScreen como
+│   │                           # línea base de comparación
+│   └── GeneradorHuellas.kt    # Motor ANTERIOR: genera huellas pendientes en lote —
+│                               # sigue corriendo (Publicar/Editar + autocompletado de
+│                               # HomeArtesanoScreen) solo para alimentar esa línea base
 ├── viewModel/                 # ¡ojo con mayúscula/minúscula, ver más abajo!
+│   ├── AdminRuacListViewModel.kt # solicitudes de RUAC pendientes
 │   ├── ArtisanProfileViewModel.kt
 │   ├── ClientProfileViewModel.kt
 │   ├── HomeArtesanoViewModel.kt
@@ -107,12 +162,21 @@ app/src/main/java/com/minkaart/app/
 │   ├── LoginViewModel.kt
 │   ├── NotificationsViewModel.kt # estado de la campana: lista + conteo de no leídas
 │   ├── ProductViewModel.kt
-│   └── RegisterViewModel.kt
+│   ├── RecognitionViewModel.kt # búsqueda real: estados Captura/Recortando/Analizando/
+│   │                             # Resultados/SinResultados/Error — llama al callable
+│   │                             # "buscarPorImagen" (Vertex AI), ya no compara nada local
+│   ├── RegisterViewModel.kt
+│   └── VisualEvalViewModel.kt # evaluación de 3 métodos: Solo ORB / Híbrido (motor
+│                                 # anterior, local) vs. Nuevo — Vertex AI (real, separado
+│                                 # buena/poca luz) — solo administrador
 └── ui/
     ├── admin/                     # Rol "administrador" (Fase 5)
     │   ├── AdminRegisterScreen.kt  # formulario mínimo: correo, contraseña, PIN
-    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes
-    │   └── AdminRuacReviewScreen.kt # aprobar/rechazar una solicitud
+    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes + enlace "Evaluar
+    │   │                           # búsqueda visual" (no genera huellas, solo evalúa)
+    │   ├── AdminRuacReviewScreen.kt # aprobar/rechazar una solicitud
+    │   └── AdminVisualEvalScreen.kt # evaluación con fotos de prueba: Solo ORB / Híbrido
+    │                                 # (anterior) vs. Nuevo — Vertex AI (buena/poca luz)
     ├── ruac/                      # Solicitud e insignia de RUAC (Fase 5)
     │   ├── RequestRuacScreen.kt   # el artesano solicita/re-solicita su RUAC
     │   └── RuacBadgeScreen.kt     # insignia real (reemplaza el placeholder de RUAC_BADGE)
@@ -132,7 +196,7 @@ app/src/main/java/com/minkaart/app/
     │   ├── ImageUploadBox.kt      # selector de varias imágenes con miniaturas + eliminar
     │   │                         # (Publicar/Editar), hasta ProductViewModel.MAX_IMAGENES
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
-    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (recognition, RUAC, etc.)
+    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (ACCOUNT_SETTINGS)
     │   ├── BarraValoracion.kt     # barra con degradado de marca (calidad/confianza), reemplaza a ConfianzaDots
     │   ├── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
     │   ├── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
@@ -154,6 +218,8 @@ app/src/main/java/com/minkaart/app/
     │   ├── MyProductsScreen.kt    # "Panel de Publicaciones": lista, editar/eliminar (menú ⋮)
     │   ├── PublicationScreen.kt
     │   └── EditProductScreen.kt
+    ├── recognition/RecognitionScreen.kt # búsqueda visual real (cámara/galería, flash,
+    │                                       # recorte ajustable estilo Google Lens)
     ├── register/RegisterScreen.kt
     ├── welcome/WelcomeScreen.kt
     └── theme/
@@ -169,17 +235,32 @@ app/src/main/java/com/minkaart/app/
                                      # y MyProductsScreen (Ajustes 2)
 ```
 
+Aparte, `app/src/debug/assets/evaluacion/` (solo se empaqueta en el APK de debug) guarda las
+fotos de prueba y un `etiquetas.csv` para "Evaluar búsqueda visual" — ver "Evaluación" en
+Flujos principales; el formato exacto está en el `README.txt` de esa misma carpeta.
+
 Además, en la raíz del repositorio (fuera de `app/`):
 
 ```
 firebase.json               # configuración del proyecto Firebase (Functions, Firestore)
 .firebaserc                  # alias del proyecto Firebase (minka-art)
-firestore.indexes.json       # índices compuestos de Firestore
+firestore.indexes.json       # índices compuestos, incluido el índice vectorial de
+                              # embeddingsVisuales.embedding (dimension 1408, flat)
 functions/
-├── src/index.ts             # Cloud Functions onCall (enviarCodigoVerificacion, verificarCodigo)
-│                             # y triggers de Firestore que alimentan "notificaciones"
-│                             # (notificarNuevaVenta, notificarNuevaValoracion,
-│                             # notificarLikeNuevo, notificarCambioRuac)
+├── src/index.ts             # Cloud Functions:
+│                             #  - onCall enviarCodigoVerificacion / verificarCodigo
+│                             #  - triggers que alimentan "notificaciones"
+│                             #    (notificarNuevaVenta, notificarNuevaValoracion,
+│                             #    notificarLikeNuevo, notificarCambioRuac)
+│                             #  - sincronizarEmbeddingVisual (trigger en "productos"):
+│                             #    calcula el embedding con Vertex AI y lo guarda en
+│                             #    "embeddingsVisuales"
+│                             #  - buscarPorImagen (onCall): la búsqueda real —
+│                             #    embedding de la foto + Firestore findNearest
+├── src/scripts/rellenarEmbeddings.ts # script (no Cloud Function) para el relleno
+│                             # único de productos existentes — se corre a mano, una
+│                             # sola vez, con Application Default Credentials locales:
+│                             # npm run rellenar-embeddings
 ├── lib/                     # salida compilada de TypeScript (generada, no editar a mano)
 ├── package.json
 └── SETUP.md                 # cómo configurar el secreto RESEND_API_KEY y desplegar
@@ -214,11 +295,12 @@ de `AppNavigation.kt`:
 | `ACCOUNT_SETTINGS` | `account_settings` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Configuración de la cuenta") |
 | `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
 | `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
-| `RECOGNITION` | `recognition` | `PlaceholderScreen` | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
+| `RECOGNITION` | `recognition` | `RecognitionScreen` (búsqueda visual real, ya no placeholder) | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
 | `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RegisterScreen` (enlace "¿Eres administrador?") |
 | `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
+| `ADMIN_VISUAL_EVAL` | `admin_visual_eval` | `AdminVisualEvalScreen` | Sí | `AdminRuacListScreen` (enlace "Evaluar búsqueda visual" en el encabezado) |
 | `REGISTER_SALE` | `register_sale/{productId}` | `RegisterSaleScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → "Registrar venta") |
 | `RATE_SALE` | `rate_sale/{ventaId}` | `RateSaleScreen` | Sí, con argumento de ruta | `PurchaseHistoryScreen` (venta "Pendiente de valorar") |
 | `QUALITY_TRUST` | `quality_trust/{productId}` | `QualityTrustScreen` | Sí, con argumento de ruta | `ProductDetailScreen` (bloque de calidad/confianza), `ArtisanProfileScreen` (indicador de confianza) |
@@ -350,6 +432,102 @@ eso `obtenerTodosLosProductosActivos` trae todos los productos y filtra `activo`
 memoria**, no en el propio query — así los productos publicados antes de agregar el campo
 también aparecen en el catálogo.
 
+### Firestore — colección `embeddingsVisuales/{productId}` (Búsqueda visual — motor real)
+
+Solo la escriben/leen Cloud Functions (`allow read, write: if false` en las reglas) — la
+app nunca la toca directamente, solo recibe `{productId, artesanoId, similitud}` de
+vuelta del callable `buscarPorImagen`. No hay una `data class` de Kotlin para esto
+(igual que `codigosVerificacion`): no hace falta, ningún código de la app la deserializa.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `productId` | `String` | Igual al id del documento |
+| `artesanoId` | `String` | Copiado de `Product.artesanoId` |
+| `activo` | `Boolean` | Copiado de `Product.activo` — `buscarPorImagen` descarta los inactivos después de `findNearest` (no antes: el filtro se aplica en memoria sobre los ~30 resultados, no como pre-filtro del índice) |
+| `modelo` | `String` | `"multimodalembedding@001"` — por si en el futuro conviven embeddings de más de un modelo/dimensión |
+| `version` | `Int` | `1` — sube si cambia cómo se calcula el embedding (p. ej. otro modelo o dimensión), mismo criterio que `HuellaVisual.version` en el motor anterior |
+| `actualizadoEn` | `Timestamp` | `FieldValue.serverTimestamp()` |
+| `embedding` | Firestore `Vector` (`FieldValue.vector()`, no un `Blob`) | 1408 valores `float32`, ya normalizado a norma 1 por Vertex AI — con eso, `DOT_PRODUCT` en `findNearest` equivale a similitud coseno sin costo extra de normalizar |
+
+**Cómo se mantiene al día, siempre en automático** (reemplaza a "Huellas visuales" del
+motor anterior, ver más abajo): la Cloud Function `sincronizarEmbeddingVisual`
+(`onDocumentWritten` sobre `productos/{productId}`) descarga `imagenes[0]` (la imagen
+principal) de Storage, le pide el embedding a Vertex AI (`multimodalembedding@001`,
+región `us-central1`) y lo guarda — solo cuando `imagenes` cambió (producto nuevo o
+imágenes editadas). Si solo cambió `activo`, se actualiza nada más ese campo, sin volver
+a llamar a Vertex AI. Si se borra el producto, se borra su documento aquí. Cualquier
+error se registra en logs y nunca rompe la publicación/edición del producto.
+
+**Índice vectorial**: `embeddingsVisuales.embedding`, `dimension: 1408`, tipo `flat`,
+`queryScope: COLLECTION` — declarado en `firestore.indexes.json` y creado con
+`gcloud firestore indexes composite create` (ver "Configuración de Google Cloud" más
+abajo). El máximo permitido por Firestore es 2048 dimensiones.
+
+**Relleno único de productos existentes**: `functions/src/scripts/rellenarEmbeddings.ts`
+(no es una Cloud Function, es un script que se corre a mano una sola vez) recorre todos
+los productos y genera el embedding de los que no lo tenían — se usó para los ~103
+productos que ya existían al momento de agregar la búsqueda visual con Vertex AI
+(incluidos los del catálogo cargado por script, origen `"catalogo_adc"`), con 0 errores.
+
+### Firestore — colección `limitesBusquedaVisual/{uid}` (control de costos)
+
+Solo la escribe la Cloud Function `buscarPorImagen`, para limitar cuántas búsquedas
+visuales puede hacer un mismo usuario por día (evita que alguien agote el presupuesto de
+Vertex AI a propósito o por error). Un administrador queda exento de este límite (lo
+necesita para correr "Evaluar búsqueda visual" contra muchas fotos de prueba de una
+sola vez).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `fecha` | `String` | `YYYY-MM-DD`, se reinicia el conteo cuando cambia |
+| `conteo` | `Int` | Búsquedas hechas ese día — tope actual: `LIMITE_BUSQUEDAS_DIARIAS = 30` |
+
+### Firestore — colección `huellasVisuales/{productId}` (Búsqueda visual — motor ANTERIOR, en transición)
+
+**Este motor ya no participa en la búsqueda real** (ver "Búsqueda visual" en Flujos
+principales y "Estado actual y pendientes") — sigue existiendo únicamente porque
+`AdminVisualEvalScreen` todavía lo usa como línea base de comparación ("Solo ORB" /
+"Híbrido") contra el motor nuevo, y está pendiente de eliminar (junto con
+`GeneradorHuellas`, `VisualSearchRepository`, `MotorHuellaVisual` y las dependencias de
+MediaPipe/OpenCV-matching) una vez esa comparación se confirme con fotos reales.
+
+Definido en `data/model/HuellaVisual.kt`. **Colección aparte de `productos` a
+propósito**: no debía romper `productoBaseIgual` (que ya compara todos los campos
+"base" de un producto) ni hacer más pesado el `get()` completo que trae el feed del
+catálogo (`obtenerTodosLosProductosActivos`) — las huellas solo las necesita
+`AdminVisualEvalScreen` (antes también `RecognitionScreen`, ya no).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `productId` | `String` | Igual al id del documento |
+| `artesanoId` | `String` | Copiado de `Product.artesanoId` — lo usan las reglas para verificar dueño |
+| `version` | `Int` | Se compara contra `MotorHuellaVisual.VERSION_HUELLA` (actualmente **2** — subió al agregar el embedding semántico de MediaPipe); si el algoritmo cambia, sube la constante y `GeneradorHuellas` regenera cualquier huella con una versión menor. Una huella `v1` (sin `embedding`) sigue funcionando: da similitud coseno `0.0` hasta que se regenera — nunca aparece en "Artesanías parecidas", pero sí puede seguir apareciendo en "Coincidencia exacta" si ORB la encuentra |
+| `creadoEn` | `Timestamp?` | `Timestamp.now()`, puesto por `VisualSearchRepository.guardarHuella` |
+| `imagenes` | `List<HuellaImagen>` | Una entrada por cada imagen de `Product.imagenes` en el momento de calcular la huella |
+
+`HuellaImagen`: `indiceImagen: Int` (posición en `Product.imagenes`), `descriptores: Blob`
+(descriptores binarios de ORB, ~500 keypoints × 32 bytes ≈ 16 KB), `filas`/`columnas: Int`
+(dimensiones de la matriz de descriptores, necesarias para reconstruirla),
+`keypointsX`/`keypointsY: List<Double>` (posición de cada keypoint, en el mismo orden que
+los descriptores — necesarias para `findHomography` + RANSAC, no solo para el matching de
+descriptores), `histograma: List<Double>` (histograma HSV normalizado, canales H y S) y,
+desde `version = 2`, `embedding: Blob` — el embedding semántico de MediaPipe Image
+Embedder, cuantizado a 1 byte por dimensión y L2-normalizado (`quantize = true`,
+`l2Normalize = true`): con MobileNet-V3 Large, el vector tiene 1280 valores, es decir
+**1280 bytes** (~1,25 KB) por imagen. Es la pieza más liviana de la huella con
+diferencia: apenas engorda el documento (~1,25 KB de 1280 bytes sobre los ~32 KB que ya
+pesaba cada imagen entre ORB e histograma, un ~4% más). El documento completo sigue muy
+por debajo del límite de 1 MB de Firestore incluso con las 15 imágenes de
+`ProductViewModel.MAX_IMAGENES` (≈ 500 KB en el peor caso).
+
+**Cómo se generan, siempre en automático, sin que nadie tenga que pulsar nada** (ver
+"Huellas visuales" en Flujos principales): al publicar/editar, y con un autocompletado
+silencioso en `HomeArtesanoScreen` — ambos caminos comparten el mismo caso de uso,
+`vision/GeneradorHuellas.kt`, así que ninguno duplica la lógica de "qué está pendiente" ni
+cómo se calcula cada huella. El administrador **no** participa en generar huellas — su
+único vínculo con la búsqueda visual es la pantalla de evaluación para el documento de
+grado (ver "Evaluación de la búsqueda visual"), que no escribe ninguna huella.
+
 ### Firestore — colección `productos/{autoId}/likes/{uid}`
 
 Subcolección: un documento por usuario que le dio "me gusta" a ese producto.
@@ -460,6 +638,13 @@ como el resto de campos "base") y `materiaPrima` entró — se había quedado af
 que se agregó a `Product.kt`, lo que dejaba a cualquier no-dueño cambiarlo sin que
 ninguna rama lo notara. `materiaPrimaOtro` entró al mismo tiempo que `materiaPrima` se
 convirtió en dropdown, por la misma razón.
+
+**Reglas de `huellasVisuales`** (ver el modelo de datos más abajo): lectura para
+cualquier autenticado; `create`/`update`/`delete` para el artesano dueño
+(`artesanoId == request.auth.uid` **y** que ese mismo uid sea el dueño real de
+`productos/{productId}` — un `get()` cruzado, para que un artesano no pueda escribir la
+huella de un producto ajeno con su propio `artesanoId`) o para un usuario con
+`rol == "administrador"` — mismo patrón `.get(campo, default)` que el resto del archivo.
 
 ### Firestore — colección `notificaciones/{autoId}`
 
@@ -658,8 +843,8 @@ pueda reutilizarse.
   - Al iniciar sesión, el artesano siempre entra en modo artesano (`LoginScreen` ya lo
     manda a `HOME_ARTESANO`) — el modo no se persiste entre sesiones.
 - **Catálogo del cliente** (`HomeClienteScreen` → `HomeClienteViewModel`): barra de
-  búsqueda real (el ícono de cámara navega a `Routes.RECOGNITION`, todavía un
-  `PlaceholderScreen` — el reconocimiento visual con OpenCV es de otra fase), chips de
+  búsqueda real (el ícono de cámara navega a `Routes.RECOGNITION`, la búsqueda visual
+  real — ver "Búsqueda visual" más abajo), chips de
   categoría y, debajo, chips de materia prima — ambos armados dinámicamente a partir de
   los valores distintos de `categoria`/`materiaPrima` presentes en los productos
   cargados, no de una lista fija; los tres filtros (categoría, materia prima, texto) se
@@ -685,6 +870,165 @@ pueda reutilizarse.
   ... }`) antes de recalcular el filtro, y tanto el texto escrito como
   `nombre`/`descripcion` de cada producto se normalizan (sin tildes, minúsculas, vía
   `java.text.Normalizer` del propio JDK) para que "ceramica" encuentre "Cerámica".
+- **Búsqueda visual** (`RecognitionScreen` → `RecognitionViewModel`, ícono de cámara del
+  buscador de `HomeClienteScreen` — ya no un `PlaceholderScreen`): desde este ajuste, el
+  embedding lo calcula **Vertex AI en la nube** y la comparación la hace **Firestore
+  vector search**, no el celular — reemplaza al motor híbrido anterior (ORB + MediaPipe
+  local, ver más abajo "Motor anterior, en transición"). **No** es clasificación de
+  objetos, no reconoce "qué es" una pieza: solo qué tan parecida es (similitud coseno vía
+  `DOT_PRODUCT`, porque Vertex AI ya devuelve el vector normalizado a norma 1) a las
+  fotos principales del catálogo. Un artesano "viendo como cliente" llega aquí sin ningún
+  cambio adicional — la ruta no distingue rol. Cinco estados:
+  1. **Captura**: `PreviewView` (CameraX) envuelto en `AndroidView` con un marco guía
+     superpuesto, botón de disparo circular, botón de **flash/torch** (arriba a la
+     derecha — el proyecto no tiene `material-icons-extended`, así que es un botón de
+     texto, mismo estilo que "Galería") o "Galería"
+     (`ActivityResultContracts.GetContent()`, mismo patrón que `PublicationScreen`). El
+     permiso `CAMERA` se pide al entrar (mismo patrón que `EfectoNotificaciones` con
+     `POST_NOTIFICATIONS`); si lo niegan, la vista previa no aparece pero la galería
+     sigue disponible. La foto se captura en memoria
+     (`ImageCapture.OnImageCapturedCallback` → bytes JPEG → `Bitmap`, corregido por
+     `imageInfo.rotationDegrees`) — no hay ningún archivo temporal ni `FileProvider`.
+  2. **Recortando** (nuevo, estilo Google Lens): rectángulo ajustable sobre la foto
+     tomada/elegida, con una manija en cada esquina (arrastrable) y la opción de mover la
+     caja completa — implementado a mano con gestos de Compose
+     (`detectDragGestures`), sin ninguna librería de recorte nueva. "Usar foto" recorta el
+     `Bitmap` real (`Bitmap.createBitmap`) al rectángulo elegido y continúa; "Cancelar"
+     vuelve a Captura.
+  3. **Analizando**: miniatura de la foto recortada + `CircularProgressIndicator`,
+     mientras corren en cadena: `PreprocesadorImagen.procesar` (en el dispositivo) →
+     callable `buscarPorImagen` (Cloud Functions).
+  4. **Resultados**: agrupados por artesano (`GrupoArtesano`), cada `ProductoFeedCard`
+     (sin tocar — la sigue compartiendo el feed del cliente) con un chip discreto de
+     nivel — "Muy parecido" (similitud ≥ `RecognitionViewModel.UMBRAL_MUY_PARECIDO`) o
+     "Parecido" — nunca un porcentaje crudo. El nombre del artesano navega a
+     `Routes.artisanProfileRoute`, cada producto a `Routes.productDetailRoute`. Los
+     candidatos con similitud por debajo de `UMBRAL_MINIMO_COSENO` se descartan del lado
+     de la app (el backend ya devuelve como máximo 30, sin filtrar por umbral).
+  5. **SinResultados**: "No encontramos artesanías parecidas" + botón para volver a
+     Captura.
+
+  **Preprocesamiento en el dispositivo** (`vision/PreprocesadorImagen.kt`, OpenCV, clase
+  separada — ya no hace ningún matching, solo prepara la imagen):
+  - **Nitidez**: varianza del Laplaciano; por debajo de `UMBRAL_VARIANZA_LAPLACIANO`, la
+    foto se rechaza y se pide repetirla ("La foto salió borrosa...").
+  - **Brillo**: por debajo de `UMBRAL_BRILLO_MUY_OSCURO`, se rechaza pidiendo repetir con
+    flash o más luz; entre ese umbral y `UMBRAL_BRILLO_POCA_LUZ` (poca luz, pero
+    salvable), se corrige con **CLAHE** sobre el canal L en espacio LAB (contraste, sin
+    tocar el color) — por encima de `UMBRAL_BRILLO_POCA_LUZ` no se toca nada.
+  - Redimensiona al lado máximo esperado por el backend (800px) y devuelve un JPEG en
+    bytes. Los tres umbrales son un punto de partida documentado, sin calibrar todavía
+    con fotos reales — ver "Evaluación" más abajo.
+
+  **Backend** (`functions/src/index.ts`, ver Modelo de datos —
+  `embeddingsVisuales`/`limitesBusquedaVisual` — para el detalle de colecciones): el
+  callable `buscarPorImagen` (`onCall`, solo autenticados) recibe el JPEG en base64
+  (rechaza si pesa más de lo esperado para un lado de 800px), aplica un límite de 30
+  búsquedas/día por usuario (el rol `"administrador"` queda exento, lo necesita para la
+  evaluación), le pide el embedding a Vertex AI y hace `Query.findNearest` sobre
+  `embeddingsVisuales` (`DOT_PRODUCT`, límite 30), descarta los productos inactivos y
+  devuelve `[{productId, artesanoId, similitud}]` — `RecognitionViewModel` resuelve los
+  datos completos con `ProductRepository.obtenerProductosPorIds`. Todo esto requiere
+  internet: sin conexión, la pantalla muestra un mensaje claro en vez de quedarse
+  cargando.
+
+  **Diagrama del flujo** (búsqueda en vivo, cliente):
+  ```
+  RecognitionScreen (Captura)
+      │ foto (cámara/galería)
+      ▼
+  PantallaRecorte — el usuario ajusta el rectángulo
+      │ Bitmap recortado
+      ▼
+  PreprocesadorImagen (OpenCV, en el dispositivo)
+      │  ├─ borrosa / muy oscura → "repite la foto" (no llega al backend)
+      │  └─ ok (con CLAHE si hace falta) → JPEG en bytes
+      ▼
+  buscarPorImagen (Cloud Function, onCall)
+      │  ├─ límite diario / tamaño de imagen → error claro
+      │  ├─ Vertex AI multimodalembedding@001 → vector de 1408 dimensiones
+      │  └─ Firestore findNearest sobre embeddingsVisuales (DOT_PRODUCT, límite 30)
+      │        → descarta inactivos → [{productId, artesanoId, similitud}]
+      ▼
+  RecognitionViewModel
+      │  ├─ filtra por UMBRAL_MINIMO_COSENO
+      │  ├─ ProductRepository.obtenerProductosPorIds (datos completos)
+      │  └─ AuthRepository.obtenerUsuarioPorId (nombre de cada artesano)
+      ▼
+  RecognitionScreen (Resultados) — agrupados por artesano, con chip
+  "Muy parecido"/"Parecido"
+  ```
+
+  Y el flujo que mantiene `embeddingsVisuales` al día (automático, sin acción del
+  artesano ni del administrador):
+  ```
+  ProductViewModel.publicarProducto / actualizarProducto
+      │ escribe/actualiza productos/{productId}
+      ▼
+  sincronizarEmbeddingVisual (trigger onDocumentWritten)
+      │  ├─ imagenes cambiaron → descarga imagenes[0] de Storage → Vertex AI → guarda
+      │  │    el vector en embeddingsVisuales/{productId}
+      │  ├─ solo cambió "activo" → actualiza ese campo nada más (sin llamar a Vertex AI)
+      │  └─ producto borrado → borra embeddingsVisuales/{productId}
+      ▼
+  embeddingsVisuales/{productId} listo para findNearest
+  ```
+
+- **Motor anterior, en transición (`huellasVisuales`, `MotorHuellaVisual`,
+  `GeneradorHuellas`)**: **ya no participa en la búsqueda real** — se mantiene solo
+  porque `AdminVisualEvalScreen` todavía lo usa como línea base de comparación contra el
+  motor nuevo, y está pendiente de eliminar (junto con las dependencias de MediaPipe y
+  el matching de OpenCV/ORB) en cuanto esa comparación se confirme con fotos reales (ver
+  "Estado actual y pendientes"). Mientras tanto sigue generándose exactamente igual que
+  antes, siempre en automático, sin que nadie tenga que pulsar nada — dos caminos
+  alimentan `huellasVisuales` a través de `vision/GeneradorHuellas.kt`:
+  - **Publicar/editar** (`ProductViewModel.publicarProducto`/`actualizarProducto`): calcula
+    y guarda la huella en segundo plano justo después de guardar el producto — si falla,
+    el producto se publica/actualiza igual, solo se registra el error (`Log.w`).
+  - **Autocompletado del artesano** (`HomeArtesanoScreen`, silencioso): al abrir el Home,
+    calcula la huella de sus productos que no la tengan (o con `version` vieja).
+
+  `MotorHuellaVisual.kt` combina ORB + histograma HSV (para "Solo ORB", la línea base
+  original) con un embedding de MediaPipe Image Embedder (MobileNet-V3, cuantizado a 1
+  byte/dimensión) para "Híbrido" — ver el código para el detalle completo de pesos y
+  umbrales (`PESO_INLIERS_ORB`, `UMBRAL_MINIMO_COSENO` de este motor, etc.), documentado
+  ahí mismo. Todo corre en un `Executor` único, sin corrutinas/Flow, mismo patrón que el
+  resto de `vision/`.
+
+- **Evaluación de la búsqueda visual** (`AdminVisualEvalScreen` →
+  `VisualEvalViewModel`, solo rol administrador — enlace "Evaluar búsqueda visual" en el
+  encabezado de `AdminRuacListScreen`): compara **tres** métodos sobre el mismo conjunto
+  de fotos de prueba, midiendo si el producto correcto o uno de su misma categoría
+  aparece en el top 1/5/10 de cada uno — pensada para el sustento del documento de grado,
+  no para uso en producción:
+  - **Solo ORB** y **Híbrido**: el motor anterior, comparado localmente en el
+    dispositivo (sin red), igual que siempre.
+  - **Nuevo — Vertex AI**: el mismo camino real que usa `RecognitionScreen` —
+    `PreprocesadorImagen.procesar` + una llamada real al callable `buscarPorImagen` por
+    cada foto (consume presupuesto de Vertex AI, ~$0.0001/foto). Una foto que el
+    preprocesador rechaza (borrosa/muy oscura) cuenta como fallo de este método para esa
+    foto, no se omite — así el número refleja lo que de verdad vería un usuario. Se
+    reporta además **separado por condición de luz** (buena luz / poca luz), detectada
+    automáticamente por `PreprocesadorImagen` según el brillo de cada foto — no hace
+    falta etiquetarla a mano en `etiquetas.csv`.
+
+  **No genera ni toca ningún embedding/huella** (nunca escribe en `huellasVisuales` ni en
+  `embeddingsVisuales`): solo lee lo que ya existe y compara, así que no es una forma
+  alternativa de "activar" el reconocimiento — eso ya es automático (huellas) o
+  automático del lado del backend (embeddings, ver `sincronizarEmbeddingVisual`).
+  - Las fotos y el archivo `etiquetas.csv` (formato exacto en su propio `README.txt`) van
+    en `app/src/debug/assets/evaluacion/` — solo se empaquetan en el APK de **debug**
+    (`assembleDebug`/`installDebug`), nunca en el de release. A la fecha de este ajuste,
+    esa carpeta no tiene fotos reales todavía (queda pendiente que se agreguen).
+  - Además de la tabla top 1/5/10 por método (y por condición de luz para el método
+    nuevo), mide el tiempo promedio de cada método (embedding/búsqueda locales del motor
+    anterior vs. el viaje completo — preprocesar + red + Vertex AI — del nuevo) y
+    conserva el **chequeo de cuantización** del motor anterior (compara el coseno con el
+    embedding `float` de MediaPipe sin cuantizar contra el cuantizado que se guarda,
+    para justificar o no `quantize = true` — no aplica al motor nuevo, que no cuantiza
+    nada: Vertex AI ya devuelve `float32` y Firestore lo guarda tal cual).
+  - El reporte se muestra en pantalla y además se registra completo en Logcat (tag
+    `EvalVisual`) en formato Markdown, listo para copiar al documento de grado.
 - **Detalle y contacto** (`ProductDetailScreen` → `ProductDetailViewModel`): encadena dos
   lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
   `obtenerUsuarioPorId`) porque Firestore no tiene joins. Al cargar el producto,
@@ -928,6 +1272,42 @@ firebase deploy --only functions
 
 Detalle de la configuración en `functions/SETUP.md`.
 
+### Configuración de Google Cloud (búsqueda visual)
+
+El proyecto `minka-art` necesita, además de lo que ya configura Firebase, lo siguiente en
+Google Cloud (ya hecho en este proyecto; se documenta para poder reproducirlo en otro):
+
+1. **Plan de facturación Blaze** (pago por uso) — Vertex AI no funciona en el plan
+   gratuito Spark.
+2. **API de Vertex AI habilitada**: `gcloud services enable aiplatform.googleapis.com
+   --project=minka-art`.
+3. **Permiso IAM** para la cuenta de servicio que usan las Cloud Functions
+   (`{numero_de_proyecto}-compute@developer.gserviceaccount.com`, la que usa Cloud
+   Functions v2/Cloud Run por defecto si no se configura una propia):
+   `gcloud projects add-iam-policy-binding minka-art
+   --member="serviceAccount:{numero_de_proyecto}-compute@developer.gserviceaccount.com"
+   --role="roles/aiplatform.user"`.
+4. **Alerta de presupuesto**: 12.000 COP/mes (~3 USD, la cuenta de facturación de este
+   proyecto está en pesos colombianos, no dólares), avisos al 50/90/100% —
+   `gcloud billing budgets create` (API `billingbudgets.googleapis.com`).
+5. **Índice vectorial de Firestore**: ver "Firestore —
+   `embeddingsVisuales/{productId}`" en Modelo de datos — `gcloud firestore indexes
+   composite create` (la sintaxis exacta del flag `--field-config` con `vector-config`
+   es particular, ver el historial de este ajuste o la documentación oficial de
+   Firestore vector search si hay que recrearlo).
+6. **Application Default Credentials locales**, solo para correr
+   `functions/src/scripts/rellenarEmbeddings.ts` desde una máquina de desarrollo (las
+   Cloud Functions desplegadas no lo necesitan, usan su propia cuenta de servicio):
+   `gcloud auth application-default login`.
+
+**Costos y límites honestos**: Vertex AI cobra ~$0.0001 por imagen
+(`multimodalembedding@001`) — publicar/editar un producto y cada búsqueda visual de un
+usuario cuestan eso. El callable `buscarPorImagen` limita a 30 búsquedas/día por usuario
+(el rol `"administrador"` queda exento, para poder correr la evaluación). La búsqueda
+visual **requiere internet** (antes comparaba en el dispositivo, ahora no) y **solo
+encuentra artesanías activas publicadas en Minka Art** — no es reconocimiento de objetos
+genérico, no sabe "qué es" una pieza fuera de ese catálogo.
+
 ## Estado actual y pendientes
 
 **Implementado**
@@ -1003,15 +1383,126 @@ Detalle de la configuración en `functions/SETUP.md`.
   marca y conteo de verificaciones (`BarraValoracion`/`BarraValoracionCompacta`)
   reemplazan a los 4 puntos de `ConfianzaDots` en Detalle de producto, Perfil del artesano
   y la tarjeta del feed — ver "Diseño y marca".
+- Búsqueda visual con **Vertex AI + Firestore vector search** (`RecognitionScreen`, ya
+  no un `PlaceholderScreen`): reemplaza al motor híbrido anterior que corría en el
+  dispositivo (ORB + MediaPipe) — ahora OpenCV solo preprocesa la foto en el celular
+  (`PreprocesadorImagen`: CLAHE, detección de borrosidad/oscuridad, recorte ajustable
+  estilo Google Lens, más el botón de flash) y Vertex AI (`multimodalembedding@001`)
+  calcula el embedding en la nube, comparado con Firestore `findNearest` desde la Cloud
+  Function `buscarPorImagen` (ver Modelo de datos y "Búsqueda visual" en Flujos
+  principales). Los embeddings de cada producto se generan solos al publicar/editar
+  (trigger `sincronizarEmbeddingVisual`); se corrió además un relleno único para los 103
+  productos que ya existían (0 errores). Incluye una pantalla de evaluación comparativa
+  para el rol administrador con **tres** métodos (Solo ORB / Híbrido, el motor anterior,
+  vs. Nuevo — Vertex AI, separado por condición de luz) — ver "Evaluación de la búsqueda
+  visual" en Flujos principales.
 
 **Pendiente / placeholder**
 - `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
   pantalla (`ARTISAN_PROFILE`/`CLIENT_PROFILE` lo reemplazaron), se dejó sin tocar ni
   eliminar por quedar fuera del alcance de la Fase 4.
-- `Routes.RECOGNITION`, `Routes.RUAC_BADGE`, `Routes.PURCHASE_HISTORY` y
-  `Routes.ACCOUNT_SETTINGS` están registradas y navegables, pero apuntan a un
-  `PlaceholderScreen` genérico — el reconocimiento visual (OpenCV), la insignia RUAC
-  real, el historial de compras y la configuración de la cuenta son de fases futuras.
+- `Routes.ACCOUNT_SETTINGS` sigue registrada y navegable, pero apunta a un
+  `PlaceholderScreen` genérico — la configuración de la cuenta es de una fase futura.
+  (`Routes.RECOGNITION` ya no es placeholder — ver "Búsqueda visual"; `RUAC_BADGE` y
+  `PURCHASE_HISTORY` tampoco lo son desde las Fases 5 y 6.)
+- **Límites honestos del motor ANTERIOR (`MotorHuellaVisual`, en transición — ya no
+  participa en la búsqueda real, ver "Búsqueda visual")**: sigue sin ser reconocimiento
+  de objetos —
+  no sabe "qué es" una pieza, solo qué tan parecida es (coseno) o qué tan probable es que
+  sea la misma (ORB). El modelo del embedder (MobileNet-V3) es **genérico**, entrenado
+  sobre ImageNet — no fue afinado (fine-tuning) con fotos de artesanías colombianas, así
+  que categorías visualmente parecidas entre sí pero conceptualmente distintas (p. ej.
+  ropa, tejidos y joyería con texturas/colores similares) pueden confundirse o
+  aparecer como "parecidas" sin serlo. Sigue siendo sensible a la luz, el fondo y el
+  ángulo de la foto de consulta (más el histograma/ORB que el embedding, que es más
+  robusto a esos cambios — es justamente lo que motivó agregarlo). Todo se compara en el
+  dispositivo (no hay índice del lado del servidor), así que el tiempo de búsqueda crece
+  con el tamaño del catálogo. Los pesos (`PESO_INLIERS_ORB`/`PESO_HISTOGRAMA`, usados solo
+  por la línea base `comparar()`) y los umbrales con nombre
+  (`UMBRAL_MINIMO_SIMILITUD`, `UMBRAL_MINIMO_COSENO`, `UMBRAL_MUY_PARECIDO`,
+  `UMBRAL_ORB_COINCIDENCIA_EXACTA`) en `MotorHuellaVisual.kt` son un punto de partida
+  documentado, no un valor definitivo — la pantalla "Evaluar búsqueda visual" (solo
+  administrador, ver Flujos principales) existe justamente para calibrarlos con fotos
+  reales; en esta sesión no se corrió con fotos propias (no hay fotos de prueba
+  incluidas en el repositorio, ver `app/src/debug/assets/evaluacion/README.txt`) ni se
+  midió el tiempo por imagen en un dispositivo o emulador real (no había ninguno
+  conectado) — el modelo elegido (MobileNet-V3 **Large**, no Small) es la opción por
+  defecto razonada en "Stack técnico", pendiente de confirmar con esa pantalla.
+  **Confirmado con pruebas reales, en tres rondas**:
+  1. `UMBRAL_MINIMO_COSENO = 0.5` resultó demasiado estricto — dos piezas parecidas pero
+     no idénticas (p. ej. dos aretes de iraca distintos) dieron un coseno real por debajo
+     de ese umbral, y `buscarMejores` las descartaba por completo en vez de mostrarlas
+     como "parecidas". Se corrigió con un mecanismo de **"mejor esfuerzo"**, no con otro
+     número adivinado sin poder probarlo: si ningún candidato llega al umbral "de
+     confianza", se muestran los candidatos más parecidos que sí tengan embedding
+     calculado — nunca se deja la búsqueda vacía mientras el catálogo tenga algo
+     remotamente parecido.
+  2. Con ese modo ya mostrando resultados, apareció el problema de fondo que se venía
+     anunciando: al fotografiar una mochila no publicada, "mejor esfuerzo" también
+     mostraba un sombrero y un arete como "parecidos" — categorías sin relación. La
+     causa **no es un bug de lógica, es del modelo**: MobileNet-V3 es un clasificador
+     genérico entrenado sobre ImageNet, no fue afinado (fine-tuning) ni entrenado con
+     una función de pérdida de tipo contraste/tripletas para que categorías distintas
+     queden "lejos" en similitud coseno — es un fenómeno conocido de los embeddings de
+     clasificadores genéricos: dos fotos de producto cualquiera comparten suficientes
+     estadísticas visuales de bajo nivel (fondo, iluminación, composición) para dar un
+     coseno "moderado" sin relación semántica real. Se mitigó (no se resolvió de raíz, a
+     pedido explícito de resolverlo del lado de la app por ahora) combinando el coseno
+     con el histograma HSV de la huella (peso 0.75/0.25,
+     `UMBRAL_MINIMO_MEJOR_ESFUERZO`) para descartar los casos más evidentes de mezcla de
+     categorías — el color no distingue todo, pero ayuda.
+  3. El histograma seguía sin ser suficiente — el usuario pidió explícitamente
+     "identificar el objeto y relacionarlo con la categoría". Se probó una **votación de
+     categoría por k-vecinos** (sin entrenar ningún modelo nuevo: los candidatos más
+     parecidos por coseno votaban con la `categoria` que ya tiene cada producto,
+     ponderado por su propio coseno, y si la votación era clara se descartaba cualquier
+     candidato de otra categoría) — **se revirtió**, porque en la práctica empeoró los
+     resultados: con un embedder genérico y ruidoso, los k-vecinos más cercanos por
+     coseno no son necesariamente de la categoría correcta, así que la votación podía
+     "confirmar" con aparente seguridad una categoría **equivocada** y de ahí descartaba
+     precisamente los candidatos que sí eran correctos — peor que no filtrar nada. Queda
+     como lección documentada: una votación k-NN solo es tan confiable como el espacio
+     de embeddings sobre el que vota, y este embedder genérico no separa bien las
+     categorías de artesanía como para sostener ese nivel de confianza. `buscarMejores`
+     volvió a depender solo del puntaje combinado coseno + histograma (punto 2). **La
+     solución de fondo sigue pendiente**: entrenar o afinar (transfer learning) un
+     embedder propio con fotos de artesanía reales, categorizadas, con una función de
+     pérdida de tipo métrico/tripletas (no una votación sobre un embedding genérico) —
+     un proyecto de Python/TensorFlow aparte de este repositorio Android, con un dataset
+     etiquetado más grande que las ~100 fotos actuales y luego exportado a `.tflite` con
+     el formato de metadatos que espera el Image Embedder de MediaPipe — no se emprendió
+     en este ajuste, a pedido explícito de resolverlo del lado de la app por ahora.
+
+  Sigue pendiente además ajustar el valor de `UMBRAL_MINIMO_COSENO` en sí con la pantalla
+  de evaluación y fotos reales; hasta entonces, prácticamente toda búsqueda sin una
+  coincidencia exacta clara cae en el modo "mejor esfuerzo".
+- **Límites honestos del motor NUEVO (Vertex AI + Firestore vector search)**: sigue sin
+  ser reconocimiento de objetos, mismo alcance que el motor anterior — solo similitud
+  visual, no "qué es" una pieza. `multimodalembedding@001` es un modelo genérico de
+  Google (no afinado con fotos de artesanías colombianas), así que el mismo fenómeno
+  documentado arriba (categorías visualmente parecidas pero distintas confundiéndose)
+  puede seguir dándose — no se descarta hasta correr la evaluación con fotos reales
+  (pendiente, ver el punto siguiente). Los umbrales de `RecognitionViewModel`
+  (`UMBRAL_MINIMO_COSENO = 0.5`, `UMBRAL_MUY_PARECIDO = 0.75`) son los mismos valores que
+  ya traía el motor anterior, copiados como punto de partida — **no** están calibrados
+  para el espacio de embeddings de Vertex AI, que es un modelo distinto; tampoco lo están
+  los tres umbrales de `PreprocesadorImagen`
+  (`UMBRAL_VARIANZA_LAPLACIANO`/`UMBRAL_BRILLO_MUY_OSCURO`/`UMBRAL_BRILLO_POCA_LUZ`).
+  Solo encuentra la **imagen principal** de cada producto (`imagenes[0]`) — si la mejor
+  coincidencia visual está en una foto secundaria, no participa en la comparación
+  (decisión de costo/alcance, ver "Firestore — `embeddingsVisuales`" en Modelo de
+  datos). Requiere internet siempre (el motor anterior comparaba en el dispositivo, este
+  no) y tiene un límite de 30 búsquedas/día por usuario.
+- **Limpieza pendiente del motor anterior**: `HuellaVisual.kt`, `VisualSearchRepository`,
+  `MotorHuellaVisual`, `GeneradorHuellas`, la colección `huellasVisuales` y sus reglas, y
+  las dependencias de MediaPipe (`com.google.mediapipe:tasks-vision`,
+  `assets/mobilenet_v3_large.tflite`) siguen en el repositorio a propósito — se dejaron
+  para que `AdminVisualEvalScreen` pudiera seguir comparando el motor nuevo contra el
+  anterior. Están pendientes de eliminar (con eso baja también el peso del APK, ver
+  "Stack técnico") en cuanto esa comparación se corra con fotos reales y se confirme que
+  el motor nuevo es al menos igual de bueno — a la fecha de este ajuste, esa comparación
+  todavía no se corrió (no hay fotos de prueba en el repositorio, ver
+  `app/src/debug/assets/evaluacion/README.txt`).
 - No existe ningún campo de foto de perfil (`fotoUrl` o similar) ni flujo de subida de
   imagen de perfil — el avatar de `ClientProfileScreen` y `ArtisanProfileScreen` siempre
   muestra un ícono por defecto.
@@ -1068,5 +1559,9 @@ Detalle de la configuración en `functions/SETUP.md`.
   mecanismo nativo de Firebase Auth. `isEmailVerified` no se comprueba en ningún punto
   de la app (login, publicación, etc.), así que hoy esto no bloquea nada, pero conviene
   tenerlo presente si en el futuro se agrega alguna comprobación basada en ese campo.
-- No hay tests reales: solo quedan las plantillas por defecto de Android Studio
-  (`ExampleUnitTest.kt`, `ExampleInstrumentedTest.kt`).
+- No hay tests unitarios/instrumentados reales: solo quedan las plantillas por defecto de
+  Android Studio (`ExampleUnitTest.kt`, `ExampleInstrumentedTest.kt`). La única
+  herramienta de verificación real del proyecto es la pantalla "Evaluar búsqueda visual"
+  (solo administrador, ver Flujos principales) — mide el motor nuevo (Vertex AI) contra
+  el anterior (Solo ORB/Híbrido) con fotos de prueba, pero es una pantalla de la app, no
+  un test que corra en CI ni con `.\gradlew.bat test`.

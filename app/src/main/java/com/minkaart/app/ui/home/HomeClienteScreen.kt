@@ -1,6 +1,7 @@
 package com.minkaart2.app.ui.home
 
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,14 +45,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -68,12 +77,51 @@ import com.minkaart2.app.viewModel.HomeClienteViewModel
 import com.minkaart2.app.viewModel.NotificationsViewModel
 import com.minkaart2.app.util.normalizar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Guinda = Color(0xFF3B0F1A)
 private val Borgona = Color(0xFF66172E)
 private val AzulAcero = Color(0xFF55708E)
 private val Marfil = Color(0xFFF2EDE6)
 private val TextoSecundario = Color(0xFF8A7480)
+
+/**
+ * Ícono de cámara dibujado a mano (cuerpo + visor + lente) — el proyecto no tiene
+ * `material-icons-extended` (que sí trae `Icons.Filled.PhotoCamera`) y no se agregó
+ * esa dependencia solo para un ícono. Reemplaza al `Icons.Filled.Search` que se usaba
+ * antes como acceso visual al reconocimiento visual.
+ */
+@Composable
+private fun IconoCamara(modifier: Modifier = Modifier, color: Color, colorFondo: Color) {
+    Canvas(modifier = modifier) {
+
+        val ancho = size.width
+        val alto = size.height
+        val cuerpoTop = alto * 0.30f
+
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(0f, cuerpoTop),
+            size = Size(ancho, alto - cuerpoTop),
+            cornerRadius = CornerRadius(alto * 0.14f, alto * 0.14f)
+        )
+
+        val visorAncho = ancho * 0.45f
+        drawRoundRect(
+            color = color,
+            topLeft = Offset((ancho - visorAncho) / 2f, 0f),
+            size = Size(visorAncho, cuerpoTop * 0.9f),
+            cornerRadius = CornerRadius(alto * 0.05f, alto * 0.05f)
+        )
+
+        // Lente: un círculo del color de fondo (hace de "hueco") con un punto
+        // central más pequeño del color del ícono, simulando el reflejo del vidrio.
+        val centro = Offset(ancho / 2f, cuerpoTop + (alto - cuerpoTop) * 0.55f)
+        val radioLente = alto * 0.22f
+        drawCircle(color = colorFondo, radius = radioLente, center = centro)
+        drawCircle(color = color, radius = radioLente * 0.45f, center = centro)
+    }
+}
 
 @Composable
 fun HomeClienteScreen(navController: NavController) {
@@ -105,6 +153,14 @@ fun HomeClienteScreen(navController: NavController) {
         delay(300)
         textoBusquedaDebounced = textoBusqueda
     }
+
+    // Para que "Buscar" de la barra inferior haga algo: sube el feed hasta arriba
+    // (la barra de búsqueda vive en esta misma pantalla, no en una ruta aparte) y le
+    // da foco al campo de texto para que el teclado se abra listo para escribir.
+    val gridState = rememberLazyGridState()
+    val focusRequesterBusqueda = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val tecladoController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
 
@@ -299,7 +355,9 @@ fun HomeClienteScreen(navController: NavController) {
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
                     cursorBrush = SolidColor(Borgona),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequesterBusqueda)
                 )
             }
 
@@ -315,13 +373,13 @@ fun HomeClienteScreen(navController: NavController) {
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                // No hay un ícono de cámara en el set básico de Material; se usa
-                // Search como acceso visual, coherente con "reconocimiento visual".
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = "Reconocimiento visual",
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp)
+                // No hay un ícono de cámara en el set básico de Material (y el
+                // proyecto no tiene material-icons-extended) — se dibuja a mano con
+                // Canvas en vez de agregar una dependencia nueva solo por un ícono.
+                IconoCamara(
+                    modifier = Modifier.size(16.dp),
+                    color = Color.White,
+                    colorFondo = Borgona
                 )
             }
         }
@@ -446,6 +504,7 @@ fun HomeClienteScreen(navController: NavController) {
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
+                state = gridState,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -495,7 +554,11 @@ fun HomeClienteScreen(navController: NavController) {
                     icon = Icons.Filled.Search,
                     label = "Buscar",
                     activo = false,
-                    onClick = { /* la barra de búsqueda ya está visible en esta misma pantalla */ }
+                    onClick = {
+                        coroutineScope.launch { gridState.animateScrollToItem(0) }
+                        focusRequesterBusqueda.requestFocus()
+                        tecladoController?.show()
+                    }
                 ),
                 BottomNavItemData(
                     icon = Icons.Filled.Favorite,

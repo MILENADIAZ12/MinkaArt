@@ -17,6 +17,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // OpenCV trae binarios nativos para 4 ABIs (~112 MB sin filtrar); se limita a
+        // dispositivos reales (arm64-v8a) y al emulador (x86_64) para no duplicar el
+        // peso del APK con armeabi-v7a/x86, que casi nadie usa hoy.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -37,6 +44,12 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+
+    // El modelo .tflite del Image Embedder de MediaPipe debe mapearse en memoria sin
+    // comprimir — si se deja comprimido, MediaPipe falla al abrirlo desde assets.
+    androidResources {
+        noCompress += "tflite"
     }
 }
 
@@ -65,4 +78,14 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation(libs.androidx.navigation.compose)
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Reconocimiento visual (búsqueda por similitud) — motor híbrido:
+    // OpenCV/ORB (misma pieza, "coincidencia exacta") + MediaPipe Image Embedder
+    // (similitud semántica, embeddings MobileNet-V3, sin ML Kit ni servidor).
+    implementation("org.opencv:opencv:4.10.0")
+    implementation("com.google.mediapipe:tasks-vision:1.0.0")
+    implementation("androidx.camera:camera-core:1.6.2")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
 }

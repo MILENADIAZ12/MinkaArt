@@ -52,7 +52,7 @@ class ProductRepository {
     fun guardarProductoConImagenes(
         producto: Product,
         imagenesUris: List<Uri>,
-        onSuccess: () -> Unit,
+        onSuccess: (Product) -> Unit,
         onError: (String) -> Unit
     ) {
 
@@ -88,7 +88,7 @@ class ProductRepository {
                 documento
                     .set(productoFinal)
                     .addOnSuccessListener {
-                        onSuccess()
+                        onSuccess(productoFinal)
                     }
                     .addOnFailureListener { error ->
                         onError(
@@ -249,7 +249,7 @@ class ProductRepository {
         producto: Product,
         imagenesExistentes: List<String>,
         imagenesNuevasUris: List<Uri>,
-        onSuccess: () -> Unit,
+        onSuccess: (Product) -> Unit,
         onError: (String) -> Unit
     ) {
 
@@ -267,10 +267,12 @@ class ProductRepository {
 
             // Sin imágenes nuevas: actualizamos los campos del producto
             // y conservamos las que el artesano decidió mantener.
+            val productoFinal = producto.copy(id = productoId, artesanoId = artesanoId, imagenes = imagenesExistentes)
+
             documento
-                .set(producto.copy(id = productoId, artesanoId = artesanoId, imagenes = imagenesExistentes))
+                .set(productoFinal)
                 .addOnSuccessListener {
-                    onSuccess()
+                    onSuccess(productoFinal)
                 }
                 .addOnFailureListener { error ->
                     onError(
@@ -300,7 +302,7 @@ class ProductRepository {
                     documento
                         .set(productoFinal)
                         .addOnSuccessListener {
-                            onSuccess()
+                            onSuccess(productoFinal)
                         }
                         .addOnFailureListener { error ->
                             onError(

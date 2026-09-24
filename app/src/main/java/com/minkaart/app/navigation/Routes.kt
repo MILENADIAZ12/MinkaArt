@@ -58,6 +58,9 @@ object Routes {
 
     const val REQUEST_RUAC = "request_ruac"
 
+    // Evaluación de la búsqueda visual (solo administrador) — ver README, "Evaluación".
+    const val ADMIN_VISUAL_EVAL = "admin_visual_eval"
+
     // =========================
     // FASE 6 — Registrar venta, Valorar compra, Calidad y confianza
     // =========================
