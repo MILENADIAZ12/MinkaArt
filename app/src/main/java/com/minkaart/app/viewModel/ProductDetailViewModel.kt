@@ -104,6 +104,23 @@ class ProductDetailViewModel : ViewModel() {
         )
     }
 
+    /**
+     * Nombre y correo de quien está viendo el producto: van en el mensaje de WhatsApp para
+     * que el artesano pueda registrar la venta con ese correo. Si falla la lectura del
+     * documento, se usa el correo de Firebase Auth y el nombre queda vacío.
+     */
+    fun obtenerDatosDelContacto(
+        onDatos: (nombre: String, correo: String) -> Unit
+    ) {
+
+        val correoAuth = FirebaseAuth.getInstance().currentUser?.email ?: ""
+
+        authRepository.obtenerUsuarioActual(
+            onSuccess = { usuario -> onDatos(usuario.nombre, usuario.correo.ifBlank { correoAuth }) },
+            onError = { onDatos("", correoAuth) }
+        )
+    }
+
     fun alternarLike(
         productoId: String,
         onError: (String) -> Unit

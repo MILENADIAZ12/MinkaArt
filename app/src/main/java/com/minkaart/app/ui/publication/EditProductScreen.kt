@@ -239,6 +239,13 @@ fun EditProductScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
 
+                Text(
+                    text = "* Campos obligatorios",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
                 ImageUploadBox(
                     onClickAgregar = { selectorImagenes.launch("image/*") },
                     imagenesExistentes = imagenesExistentes,
@@ -249,13 +256,13 @@ fun EditProductScreen(
                 )
 
                 MinkaFormField(
-                    label = "Nombre de la artesanía",
+                    label = "Nombre de la artesanía *",
                     value = nombre,
                     onValueChange = { nombre = it }
                 )
 
                 MinkaFormField(
-                    label = "Descripción",
+                    label = "Descripción *",
                     value = descripcion,
                     onValueChange = { descripcion = it },
                     singleLine = false,
@@ -263,7 +270,7 @@ fun EditProductScreen(
                 )
 
                 MinkaFormField(
-                    label = "Precio",
+                    label = "Precio *",
                     value = precio,
                     onValueChange = { nuevoValor ->
 
@@ -275,7 +282,7 @@ fun EditProductScreen(
                 )
 
                 MinkaFormField(
-                    label = "Historia y proceso de elaboración",
+                    label = "Historia y proceso de elaboración *",
                     value = historiaProceso,
                     onValueChange = { historiaProceso = it },
                     singleLine = false,
@@ -283,7 +290,7 @@ fun EditProductScreen(
                 )
 
                 MinkaDropdownField(
-                    label = "Materia prima",
+                    label = "Materia prima *",
                     opciones = CatalogosProducto.MATERIAS_PRIMAS,
                     valorSeleccionado = materiaPrima,
                     onSeleccionar = { materiaPrima = it }
@@ -292,27 +299,27 @@ fun EditProductScreen(
                 if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA) {
 
                     MinkaFormField(
-                        label = "Especifica cuál",
+                        label = "Especifica cuál *",
                         value = materiaPrimaOtro,
                         onValueChange = { materiaPrimaOtro = it }
                     )
                 }
 
                 MinkaDropdownField(
-                    label = "Departamento",
+                    label = "Departamento *",
                     opciones = CatalogosProducto.DEPARTAMENTOS,
                     valorSeleccionado = departamento,
                     onSeleccionar = { departamento = it }
                 )
 
                 MinkaFormField(
-                    label = "Municipio",
+                    label = "Municipio *",
                     value = municipio,
                     onValueChange = { municipio = it }
                 )
 
                 MinkaDropdownField(
-                    label = "Categoría",
+                    label = "Categoría *",
                     opciones = CatalogosProducto.CATEGORIAS,
                     valorSeleccionado = categoria,
                     onSeleccionar = { categoria = it }
@@ -321,7 +328,7 @@ fun EditProductScreen(
                 if (categoria == CatalogosProducto.CATEGORIA_OTROS) {
 
                     MinkaFormField(
-                        label = "Especifica cuál",
+                        label = "Especifica cuál *",
                         value = categoriaOtro,
                         onValueChange = { categoriaOtro = it }
                     )

@@ -11,6 +11,7 @@ class AdminRegisterViewModel : ViewModel() {
         nombre: String,
         correo: String,
         contraseña: String,
+        confirmarContraseña: String,
         pin: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
@@ -28,6 +29,11 @@ class AdminRegisterViewModel : ViewModel() {
 
         if (contraseña.length < 6) {
             onError("La contraseña debe tener mínimo 6 caracteres")
+            return
+        }
+
+        if (contraseña != confirmarContraseña) {
+            onError("Las contraseñas no coinciden")
             return
         }
 

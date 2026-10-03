@@ -1,5 +1,6 @@
 package com.minkaart2.app.viewModel
 
+import android.net.Uri
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -115,6 +116,25 @@ class ArtisanProfileViewModel : ViewModel() {
                     contactoPublico = contactoPublico
                 )
 
+                onSuccess()
+            },
+            onError = onError
+        )
+    }
+
+    fun actualizarFotoPerfil(
+        artesanoId: String,
+        fotoUri: Uri,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        authRepository.subirFotoPerfil(
+            uid = artesanoId,
+            fotoUri = fotoUri,
+            onSuccess = { url ->
+
+                _artesano.value = _artesano.value?.copy(fotoUrl = url)
                 onSuccess()
             },
             onError = onError

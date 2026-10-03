@@ -23,6 +23,9 @@ class RegisterSaleViewModel : ViewModel() {
     private val _clientes = mutableStateOf<List<User>>(emptyList())
     val clientes: State<List<User>> = _clientes
 
+    private val _clientesCargados = mutableStateOf(false)
+    val clientesCargados: State<Boolean> = _clientesCargados
+
     private val _cargando = mutableStateOf(true)
     val cargando: State<Boolean> = _cargando
 
@@ -48,8 +51,11 @@ class RegisterSaleViewModel : ViewModel() {
         )
 
         authRepository.obtenerClientes(
-            onSuccess = { clientes -> _clientes.value = clientes },
-            onError = { /* el buscador simplemente no encuentra resultados */ }
+            onSuccess = { clientes ->
+                _clientes.value = clientes
+                _clientesCargados.value = true
+            },
+            onError = { /* sin lista cargada no se puede validar el correo: no se marca como "No existe" */ }
         )
     }
 

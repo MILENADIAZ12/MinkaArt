@@ -144,6 +144,13 @@ fun PublicationScreen(navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
 
+            Text(
+                text = "* Campos obligatorios",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
             ImageUploadBox(
                 onClickAgregar = { selectorImagenes.launch("image/*") },
                 imagenesNuevas = imagenesUris,
@@ -152,14 +159,14 @@ fun PublicationScreen(navController: NavController) {
             )
 
             MinkaFormField(
-                label = "Nombre de la artesanía",
+                label = "Nombre de la artesanía *",
                 value = nombre,
                 onValueChange = { nombre = it },
                 placeholder = "Ej. Ruana en lana virgen"
             )
 
             MinkaFormField(
-                label = "Descripción",
+                label = "Descripción *",
                 value = descripcion,
                 onValueChange = { descripcion = it },
                 singleLine = false,
@@ -168,7 +175,7 @@ fun PublicationScreen(navController: NavController) {
             )
 
             MinkaFormField(
-                label = "Precio",
+                label = "Precio *",
                 value = precio,
                 onValueChange = { nuevoValor ->
 
@@ -181,7 +188,7 @@ fun PublicationScreen(navController: NavController) {
             )
 
             MinkaFormField(
-                label = "Historia y proceso de elaboración",
+                label = "Historia y proceso de elaboración *",
                 value = historiaProceso,
                 onValueChange = { historiaProceso = it },
                 singleLine = false,
@@ -190,7 +197,7 @@ fun PublicationScreen(navController: NavController) {
             )
 
             MinkaDropdownField(
-                label = "Materia prima",
+                label = "Materia prima *",
                 opciones = CatalogosProducto.MATERIAS_PRIMAS,
                 valorSeleccionado = materiaPrima,
                 onSeleccionar = { materiaPrima = it }
@@ -199,7 +206,7 @@ fun PublicationScreen(navController: NavController) {
             if (materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA) {
 
                 MinkaFormField(
-                    label = "Especifica cuál",
+                    label = "Especifica cuál *",
                     value = materiaPrimaOtro,
                     onValueChange = { materiaPrimaOtro = it },
                     placeholder = "Escribe la materia prima de tu artesanía"
@@ -207,21 +214,21 @@ fun PublicationScreen(navController: NavController) {
             }
 
             MinkaDropdownField(
-                label = "Departamento",
+                label = "Departamento *",
                 opciones = CatalogosProducto.DEPARTAMENTOS,
                 valorSeleccionado = departamento,
                 onSeleccionar = { departamento = it }
             )
 
             MinkaFormField(
-                label = "Municipio",
+                label = "Municipio *",
                 value = municipio,
                 onValueChange = { municipio = it },
                 placeholder = "Ej: Ráquira, Usiacurí, Mompox"
             )
 
             MinkaDropdownField(
-                label = "Categoría",
+                label = "Categoría *",
                 opciones = CatalogosProducto.CATEGORIAS,
                 valorSeleccionado = categoria,
                 onSeleccionar = { categoria = it }
@@ -230,7 +237,7 @@ fun PublicationScreen(navController: NavController) {
             if (categoria == CatalogosProducto.CATEGORIA_OTROS) {
 
                 MinkaFormField(
-                    label = "Especifica cuál",
+                    label = "Especifica cuál *",
                     value = categoriaOtro,
                     onValueChange = { categoriaOtro = it },
                     placeholder = "Escribe la categoría de tu artesanía"

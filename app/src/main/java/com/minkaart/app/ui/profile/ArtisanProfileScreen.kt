@@ -1,6 +1,8 @@
 package com.minkaart2.app.ui.profile
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,9 +61,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BarraValoracion
+import com.minkaart2.app.ui.components.IconoCamara
 import com.minkaart2.app.ui.components.PatternBackground
 import com.minkaart2.app.ui.components.ProductoFeedCard
 import com.minkaart2.app.viewModel.ArtisanProfileViewModel
@@ -92,6 +97,25 @@ fun ArtisanProfileScreen(
 
     var mostrarDialogoEditar by remember { mutableStateOf(false) }
     var mostrarDialogoEliminarRuac by remember { mutableStateOf(false) }
+
+    val selectorFoto = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+
+        if (uri != null) {
+
+            viewModel.actualizarFotoPerfil(
+                artesanoId = artesanoId,
+                fotoUri = uri,
+                onSuccess = {
+                    Toast.makeText(context, "Foto de perfil actualizada", Toast.LENGTH_SHORT).show()
+                },
+                onError = { mensaje ->
+                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                }
+            )
+        }
+    }
 
     LaunchedEffect(artesanoId) {
 
@@ -196,12 +220,50 @@ fun ArtisanProfileScreen(
                                 .background(AzulClaro),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = Guinda,
-                                modifier = Modifier.size(30.dp)
-                            )
+
+                            if (artesano?.fotoUrl != null) {
+
+                                AsyncImage(
+                                    model = artesano?.fotoUrl,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+
+                            } else {
+
+                                Icon(
+                                    imageVector = Icons.Filled.Person,
+                                    contentDescription = null,
+                                    tint = Guinda,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                        }
+
+                        if (esPerfilPropio) {
+
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(Borgona)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { selectorFoto.launch("image/*") }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                IconoCamara(
+                                    modifier = Modifier.size(12.dp),
+                                    color = Color.White,
+                                    colorFondo = Borgona
+                                )
+                            }
                         }
                     }
                 }

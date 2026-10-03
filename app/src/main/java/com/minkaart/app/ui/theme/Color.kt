@@ -14,3 +14,4 @@ val Borgona = Color(0xFF66172E)     // Marca, botones, degradados
 val AzulClaro = Color(0xFFB7C7D9)   // Detalles, fondos suaves
 val AzulAcero = Color(0xFF55708E)   // Acentos fríos, degradado de botones
 val Marfil = Color(0xFFF2EDE6)      // Blanco cálido — fondo principal, texto sobre oscuro
+val VerdeConfirmacion = Color(0xFF2E7D32) // Mensajes de validación correcta (p. ej. "Correo correcto")

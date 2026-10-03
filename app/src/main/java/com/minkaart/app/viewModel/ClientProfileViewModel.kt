@@ -1,5 +1,6 @@
 package com.minkaart2.app.viewModel
 
+import android.net.Uri
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -57,6 +58,31 @@ class ClientProfileViewModel : ViewModel() {
             onSuccess = {
 
                 _usuario.value = _usuario.value?.copy(nombre = nombre)
+                onSuccess()
+            },
+            onError = onError
+        )
+    }
+
+    fun actualizarFotoPerfil(
+        fotoUri: Uri,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val uid = auth.currentUser?.uid
+
+        if (uid == null) {
+            onError("No hay un usuario autenticado")
+            return
+        }
+
+        authRepository.subirFotoPerfil(
+            uid = uid,
+            fotoUri = fotoUri,
+            onSuccess = { url ->
+
+                _usuario.value = _usuario.value?.copy(fotoUrl = url)
                 onSuccess()
             },
             onError = onError

@@ -1,6 +1,8 @@
 package com.minkaart2.app.ui.profile
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -46,12 +48,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.IconoCamara
 import com.minkaart2.app.viewModel.ClientProfileViewModel
 
 private val Guinda = Color(0xFF3B0F1A)
@@ -76,6 +81,24 @@ fun ClientProfileScreen(navController: NavController) {
     val esArtesano = usuario?.rol == "artesano"
 
     var mostrarDialogoNombre by remember { mutableStateOf(false) }
+
+    val selectorFoto = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+
+        if (uri != null) {
+
+            viewModel.actualizarFotoPerfil(
+                fotoUri = uri,
+                onSuccess = {
+                    Toast.makeText(context, "Foto de perfil actualizada", Toast.LENGTH_SHORT).show()
+                },
+                onError = { mensaje ->
+                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                }
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
 
@@ -148,19 +171,59 @@ fun ClientProfileScreen(navController: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(AzulClaro),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = Guinda,
-                        modifier = Modifier.size(30.dp)
-                    )
+                Box {
+
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(AzulClaro),
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        if (usuario?.fotoUrl != null) {
+
+                            AsyncImage(
+                                model = usuario?.fotoUrl,
+                                contentDescription = "Foto de perfil",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+
+                        } else {
+
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = null,
+                                tint = Guinda,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                    }
+
+                    // Insignia de cámara para cambiar la foto — siempre editable, esta
+                    // pantalla es siempre el propio perfil del usuario, nunca el de otro.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Borgona)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { selectorFoto.launch("image/*") }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconoCamara(
+                            modifier = Modifier.size(12.dp),
+                            color = Color.White,
+                            colorFondo = Borgona
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))

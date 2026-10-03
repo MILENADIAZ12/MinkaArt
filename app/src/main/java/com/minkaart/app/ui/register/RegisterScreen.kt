@@ -48,16 +48,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.BotonOjoContraseña
 import com.minkaart2.app.ui.components.GlassCard
 import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.PatternBackground
-import com.minkaart2.app.ui.components.RolePillToggle
+import com.minkaart2.app.viewModel.GoogleSignInViewModel
 import com.minkaart2.app.viewmodel.RegisterViewModel
 import java.time.Instant
 import java.time.ZoneOffset
@@ -71,7 +73,11 @@ private val Marfil = Color(0xFFF2EDE6)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegisterScreen(navController: NavController) {
+fun RegisterScreen(
+    navController: NavController,
+    rolElegido: String,
+    modoGoogleInicial: Boolean = false
+) {
 
     // =========================
     // DATOS GENERALES
@@ -80,7 +86,14 @@ fun RegisterScreen(navController: NavController) {
     var nombre by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
     var contraseña by remember { mutableStateOf("") }
-    var rol by remember { mutableStateOf("cliente") }
+    val rol = rolElegido
+    var confirmarContraseña by remember { mutableStateOf("") }
+    var verContraseña by remember { mutableStateOf(false) }
+    var verConfirmacion by remember { mutableStateOf(false) }
+
+    // true cuando la persona ya se autenticó con Google y solo falta completar el registro
+    // (artesano): sin contraseña ni código de verificación.
+    var modoGoogle by remember { mutableStateOf(modoGoogleInicial) }
 
     // =========================
     // DATOS DEL ARTESANO
@@ -121,6 +134,7 @@ fun RegisterScreen(navController: NavController) {
     // =========================
 
     val registerViewModel: RegisterViewModel = viewModel()
+    val googleViewModel: GoogleSignInViewModel = viewModel()
     val context = LocalContext.current
 
     // =========================
@@ -172,71 +186,125 @@ fun RegisterScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // El rol se eligió en la pantalla anterior: aquí solo se muestra cuál es,
+                // con la opción de volver para cambiarlo.
                 Text(
-                    text = "Únete como artesano o comprador",
-                    color = Marfil.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.bodySmall
+                    text = "Te registras como " +
+                            if (rol == "artesano") "artesano" else "cliente",
+                    color = Marfil.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(
+                    onClick = {
 
-                // =========================
-                // SELECCIÓN DEL ROL
-                // =========================
-
-                RolePillToggle(
-                    opciones = listOf("artesano" to "Artesano", "cliente" to "Cliente"),
-                    valorSeleccionado = rol,
-                    onSeleccionar = { nuevoRol ->
-
-                        rol = nuevoRol
-
-                        if (nuevoRol == "cliente") {
-                            tieneRuac = false
-                            numeroRuac = ""
-                            ruacUri = null
+                        if (modoGoogle) {
+                            googleViewModel.cancelarRegistroGoogle()
                         }
+
+                        navController.popBackStack()
                     }
-                )
+                ) {
+                    Text(
+                        text = "Cambiar rol",
+                        color = AzulClaro,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // =========================
-                // NOMBRE
-                // =========================
-
-                GlassTextField(
-                    value = nombre,
-                    onValueChange = { nombre = it },
-                    label = "Nombre completo",
-                    icon = Icons.Filled.Person,
+                Text(
+                    text = "* Campos obligatorios",
+                    color = Marfil.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // =========================
-                // CORREO
-                // =========================
+                Spacer(modifier = Modifier.height(8.dp))
 
-                GlassTextField(
-                    value = correo,
-                    onValueChange = { correo = it },
-                    label = "Correo electrónico",
-                    icon = Icons.Filled.Email,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (modoGoogle) {
 
-                // =========================
-                // CONTRASEÑA
-                // =========================
+                    // Nombre y correo vienen de la cuenta de Google ya autenticada.
+                    val (nombreGoogle, correoGoogle) = remember { registerViewModel.datosCuentaGoogle() }
 
-                GlassTextField(
-                    value = contraseña,
-                    onValueChange = { contraseña = it },
-                    label = "Contraseña",
-                    icon = Icons.Filled.Lock,
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation()
-                )
+                    Text(
+                        text = "Cuenta de Google: $nombreGoogle ($correoGoogle)",
+                        color = Marfil.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                } else {
+
+                    // =========================
+                    // NOMBRE
+                    // =========================
+
+                    GlassTextField(
+                        value = nombre,
+                        onValueChange = { nombre = it },
+                        label = "Nombre completo *",
+                        icon = Icons.Filled.Person,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // =========================
+                    // CORREO
+                    // =========================
+
+                    GlassTextField(
+                        value = correo,
+                        onValueChange = { correo = it },
+                        label = "Correo electrónico *",
+                        icon = Icons.Filled.Email,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (!modoGoogle) {
+
+                    // =========================
+                    // CONTRASEÑA Y CONFIRMACIÓN
+                    // =========================
+
+                    GlassTextField(
+                        value = contraseña,
+                        onValueChange = { contraseña = it },
+                        label = "Contraseña *",
+                        icon = Icons.Filled.Lock,
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = if (verContraseña) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        trailingIcon = {
+                            BotonOjoContraseña(
+                                visible = verContraseña,
+                                onAlternar = { verContraseña = !verContraseña }
+                            )
+                        }
+                    )
+
+                    GlassTextField(
+                        value = confirmarContraseña,
+                        onValueChange = { confirmarContraseña = it },
+                        label = "Confirmar contraseña *",
+                        icon = Icons.Filled.Lock,
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = if (verConfirmacion) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        trailingIcon = {
+                            BotonOjoContraseña(
+                                visible = verConfirmacion,
+                                onAlternar = { verConfirmacion = !verConfirmacion }
+                            )
+                        }
+                    )
+                }
 
                 // =====================================================
                 // CAMPOS QUE SOLO APARECEN SI EL USUARIO ES ARTESANO
@@ -263,7 +331,7 @@ fun RegisterScreen(navController: NavController) {
                     GlassTextField(
                         value = telefono,
                         onValueChange = { telefono = it },
-                        label = "Número de teléfono",
+                        label = "Número de teléfono *",
                         icon = Icons.Filled.Phone,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
@@ -276,7 +344,7 @@ fun RegisterScreen(navController: NavController) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Fecha de nacimiento",
+                        text = "Fecha de nacimiento *",
                         color = Marfil.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth()
@@ -377,7 +445,7 @@ fun RegisterScreen(navController: NavController) {
                     GlassTextField(
                         value = region,
                         onValueChange = { region = it },
-                        label = "Región (ej: Bogotá, Boyacá, La Guajira)",
+                        label = "Región (ej: Bogotá, Boyacá, La Guajira) *",
                         icon = Icons.Filled.LocationOn,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -389,7 +457,7 @@ fun RegisterScreen(navController: NavController) {
                     GlassTextField(
                         value = productosQueVende,
                         onValueChange = { productosQueVende = it },
-                        label = "¿Qué productos artesanales vendes?",
+                        label = "¿Qué productos artesanales vendes? *",
                         icon = Icons.Filled.ShoppingCart,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = false,
@@ -403,7 +471,7 @@ fun RegisterScreen(navController: NavController) {
                     GlassTextField(
                         value = categoriasTexto,
                         onValueChange = { categoriasTexto = it },
-                        label = "Categorías artesanales (ej: Tejidos, cerámica, joyería)",
+                        label = "Categorías artesanales (ej: Tejidos, cerámica, joyería) *",
                         icon = Icons.Filled.Star,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = false,
@@ -478,7 +546,7 @@ fun RegisterScreen(navController: NavController) {
                         GlassTextField(
                             value = numeroRuac,
                             onValueChange = { numeroRuac = it },
-                            label = "Número de registro RUAC",
+                            label = "Número de registro RUAC *",
                             icon = Icons.Filled.Person,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -519,7 +587,49 @@ fun RegisterScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (registroCompletado) {
+                if (modoGoogle) {
+
+                    GradientButton(
+                        text = "Completar registro",
+                        onClick = {
+
+                            val categorias = categoriasTexto
+                                .split(",")
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+
+                            registerViewModel.completarRegistroGoogle(
+                                telefono = telefono,
+                                fechaNacimiento = fechaNacimiento,
+                                region = region,
+                                productosQueVende = productosQueVende,
+                                categoriasArtesanales = categorias,
+                                tieneRuac = tieneRuac,
+                                numeroRuac = if (tieneRuac) numeroRuac else "",
+                                ruacUri = if (tieneRuac) ruacUri else null,
+
+                                onSuccess = {
+
+                                    Toast.makeText(
+                                        context,
+                                        "Has sido registrado correctamente",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+
+                                    navController.navigate(Routes.HOME_ARTESANO) {
+                                        popUpTo(Routes.WELCOME) { inclusive = true }
+                                    }
+                                },
+
+                                onError = { mensaje ->
+                                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                } else if (registroCompletado) {
 
                     // Ya se confirmó el correo y se guardó el usuario:
                     // se muestra como confirmación, no es una acción más.
@@ -638,6 +748,7 @@ fun RegisterScreen(navController: NavController) {
                                 nombre = nombre,
                                 correo = correo,
                                 contraseña = contraseña,
+                                confirmarContraseña = confirmarContraseña,
                                 rol = rol,
 
                                 telefono = if (rol == "artesano") telefono else "",
@@ -694,6 +805,75 @@ fun RegisterScreen(navController: NavController) {
                                         mensaje,
                                         Toast.LENGTH_LONG
                                     ).show()
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (!modoGoogle && !correoEnviado && !registroCompletado) {
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlineButton(
+                        text = "Continuar con Google",
+                        onClick = {
+
+                            googleViewModel.continuarConGoogle(
+                                context = context,
+
+                                // Ya tenía cuenta: se enruta según su rol, como el login.
+                                onExistente = { rolExistente ->
+
+                                    val destino = when (rolExistente.trim().lowercase()) {
+                                        "cliente" -> Routes.HOME_CLIENTE
+                                        "artesano" -> Routes.HOME_ARTESANO
+                                        "administrador" -> Routes.ADMIN_RUAC_LIST
+                                        else -> null
+                                    }
+
+                                    if (destino == null) {
+
+                                        Toast.makeText(
+                                            context,
+                                            "El rol del usuario no es válido: $rolExistente",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+
+                                    } else {
+
+                                        navController.navigate(destino) {
+                                            popUpTo(Routes.WELCOME) { inclusive = true }
+                                        }
+                                    }
+                                },
+
+                                // Usuario nuevo con el rol ya elegido en la pantalla anterior.
+                                onNuevo = {
+
+                                    if (rol == "cliente") {
+
+                                        googleViewModel.crearClienteConGoogle(
+                                            onSuccess = {
+                                                navController.navigate(Routes.HOME_CLIENTE) {
+                                                    popUpTo(Routes.WELCOME) { inclusive = true }
+                                                }
+                                            },
+                                            onError = { mensaje ->
+                                                Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                                            }
+                                        )
+
+                                    } else {
+
+                                        // Artesano: debe completar sus datos obligatorios.
+                                        modoGoogle = true
+                                    }
+                                },
+
+                                onError = { mensaje ->
+                                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
                                 }
                             )
                         },

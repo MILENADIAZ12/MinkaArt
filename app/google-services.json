@@ -12,7 +12,20 @@
           "package_name": "com.minkaart2.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "67997425312-21bk57j0c7i72t2993nrqhcgmdbkij5u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.minkaart2.app",
+            "certificate_hash": "fb4cb71fd5a6a14ffc40624b0992b4793462ec29"
+          }
+        },
+        {
+          "client_id": "67997425312-p9ip5q54akqmplp86qgpu59mk20km068.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD9fZNf1SaK8FsdqgrwlBuRH8gdMwD-KSo"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "67997425312-p9ip5q54akqmplp86qgpu59mk20km068.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

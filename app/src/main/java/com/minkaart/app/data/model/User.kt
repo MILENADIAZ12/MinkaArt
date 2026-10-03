@@ -36,6 +36,10 @@ data class User(
     val bio: String? = null,
     val contactoPublico: String? = null,
 
+    // Foto de perfil (cliente o artesano) — Storage: usuarios/{uid}/foto_perfil.
+    // null hasta que el usuario sube una; se muestra un ícono por defecto mientras tanto.
+    val fotoUrl: String? = null,
+
     // Token de Firebase Cloud Messaging del dispositivo actual — se sobrescribe cada vez
     // que la app arranca con sesión iniciada o cuando el token rota (MinkaMessagingService
     // .onNewToken). Null hasta que el usuario abre la app al menos una vez tras esta fase.

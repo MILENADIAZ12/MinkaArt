@@ -1,7 +1,6 @@
 package com.minkaart2.app.ui.home
 
 import android.widget.Toast
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,9 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -70,6 +66,7 @@ import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BottomNavBar
 import com.minkaart2.app.ui.components.BottomNavItemData
 import com.minkaart2.app.ui.components.EfectoNotificaciones
+import com.minkaart2.app.ui.components.IconoCamara
 import com.minkaart2.app.ui.components.IconoNotificaciones
 import com.minkaart2.app.ui.components.ProductoFeedCard
 import com.minkaart2.app.ui.components.RolePillToggle
@@ -84,44 +81,6 @@ private val Borgona = Color(0xFF66172E)
 private val AzulAcero = Color(0xFF55708E)
 private val Marfil = Color(0xFFF2EDE6)
 private val TextoSecundario = Color(0xFF8A7480)
-
-/**
- * Ícono de cámara dibujado a mano (cuerpo + visor + lente) — el proyecto no tiene
- * `material-icons-extended` (que sí trae `Icons.Filled.PhotoCamera`) y no se agregó
- * esa dependencia solo para un ícono. Reemplaza al `Icons.Filled.Search` que se usaba
- * antes como acceso visual al reconocimiento visual.
- */
-@Composable
-private fun IconoCamara(modifier: Modifier = Modifier, color: Color, colorFondo: Color) {
-    Canvas(modifier = modifier) {
-
-        val ancho = size.width
-        val alto = size.height
-        val cuerpoTop = alto * 0.30f
-
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(0f, cuerpoTop),
-            size = Size(ancho, alto - cuerpoTop),
-            cornerRadius = CornerRadius(alto * 0.14f, alto * 0.14f)
-        )
-
-        val visorAncho = ancho * 0.45f
-        drawRoundRect(
-            color = color,
-            topLeft = Offset((ancho - visorAncho) / 2f, 0f),
-            size = Size(visorAncho, cuerpoTop * 0.9f),
-            cornerRadius = CornerRadius(alto * 0.05f, alto * 0.05f)
-        )
-
-        // Lente: un círculo del color de fondo (hace de "hueco") con un punto
-        // central más pequeño del color del ícono, simulando el reflejo del vidrio.
-        val centro = Offset(ancho / 2f, cuerpoTop + (alto - cuerpoTop) * 0.55f)
-        val radioLente = alto * 0.22f
-        drawCircle(color = colorFondo, radius = radioLente, center = centro)
-        drawCircle(color = color, radius = radioLente * 0.45f, center = centro)
-    }
-}
 
 @Composable
 fun HomeClienteScreen(navController: NavController) {

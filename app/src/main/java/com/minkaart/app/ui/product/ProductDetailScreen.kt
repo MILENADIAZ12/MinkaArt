@@ -411,11 +411,16 @@ fun ProductDetailScreen(
                         text = "Contactar artesano",
                         onClick = {
 
-                            contactarPorWhatsApp(
-                                context = context,
-                                telefono = contactoMostrado,
-                                nombreProducto = productoActual.nombre
-                            )
+                            viewModel.obtenerDatosDelContacto { nombreCliente, correoCliente ->
+
+                                contactarPorWhatsApp(
+                                    context = context,
+                                    telefono = contactoMostrado,
+                                    nombreProducto = productoActual.nombre,
+                                    nombreCliente = nombreCliente,
+                                    correoCliente = correoCliente
+                                )
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -598,7 +603,9 @@ private fun formatearPrecio(precio: Long): String {
 private fun contactarPorWhatsApp(
     context: android.content.Context,
     telefono: String,
-    nombreProducto: String
+    nombreProducto: String,
+    nombreCliente: String,
+    correoCliente: String
 ) {
 
     if (telefono.isBlank()) {
@@ -611,7 +618,19 @@ private fun contactarPorWhatsApp(
     }
 
     val numeroLimpio = telefono.filter { it.isDigit() }
-    val mensaje = "Hola, vi tu $nombreProducto en Minka Art y me gustaría saber más."
+    // El nombre y el correo permiten al artesano registrar la venta en Minka Art (ver
+    // RegisterSaleScreen: se identifica al cliente por su correo exacto).
+    val datosCliente = buildString {
+        if (nombreCliente.isNotBlank()) append("\nNombre: $nombreCliente")
+        if (correoCliente.isNotBlank()) append("\nCorreo: $correoCliente")
+    }
+
+    val mensaje = "Hola, vi tu $nombreProducto en Minka Art y me gustaría saber más." +
+        if (datosCliente.isEmpty()) {
+            ""
+        } else {
+            "\n\nMis datos en Minka Art, por si quieres registrar la venta:$datosCliente"
+        }
     val mensajeCodificado = URLEncoder.encode(mensaje, "UTF-8")
 
     try {

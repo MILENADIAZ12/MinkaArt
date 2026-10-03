@@ -28,7 +28,8 @@ fun GlassTextField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    visualTransformation: VisualTransformation = VisualTransformation.None
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: (@Composable () -> Unit)? = null
 ) {
     val marfil = Color(0xFFF2EDE6)
 
@@ -44,6 +45,7 @@ fun GlassTextField(
                 tint = marfil.copy(alpha = 0.75f)
             )
         },
+        trailingIcon = trailingIcon,
         singleLine = singleLine,
         minLines = minLines,
         keyboardOptions = keyboardOptions,

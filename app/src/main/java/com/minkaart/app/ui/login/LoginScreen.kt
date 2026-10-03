@@ -35,14 +35,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.BotonOjoContraseña
 import com.minkaart2.app.ui.components.GlassCard
 import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.PatternBackground
+import com.minkaart2.app.viewModel.GoogleSignInViewModel
 import com.minkaart2.app.viewModel.LoginViewModel
 
 private val Guinda = Color(0xFF3B0F1A)
@@ -58,9 +62,64 @@ fun LoginScreen(
     var correo by remember { mutableStateOf("") }
     var contraseña by remember { mutableStateOf("") }
     var recuerdame by remember { mutableStateOf(true) }
+    var verContraseña by remember { mutableStateOf(false) }
 
     val loginViewModel: LoginViewModel = viewModel()
+    val googleViewModel: GoogleSignInViewModel = viewModel()
     val context = LocalContext.current
+
+    val irSegunRol: (String) -> Unit = { rol ->
+
+                when (rol.trim().lowercase()) {
+
+                    "cliente" -> {
+
+                        navController.navigate(
+                            Routes.HOME_CLIENTE
+                        ) {
+
+                            popUpTo(Routes.LOGIN) {
+                                inclusive = true
+                            }
+                        }
+                    }
+
+                    "artesano" -> {
+
+                        navController.navigate(
+                            Routes.HOME_ARTESANO
+                        ) {
+
+                            popUpTo(Routes.LOGIN) {
+                                inclusive = true
+                            }
+                        }
+                    }
+
+                    "administrador" -> {
+
+                        // El administrador no tiene Home propio más allá
+                        // de esto — solo aprueba/rechaza RUAC (Fase 5).
+                        navController.navigate(
+                            Routes.ADMIN_RUAC_LIST
+                        ) {
+
+                            popUpTo(Routes.LOGIN) {
+                                inclusive = true
+                            }
+                        }
+                    }
+
+                    else -> {
+
+                        Toast.makeText(
+                            context,
+                            "El rol del usuario no es válido: $rol",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+    }
 
     PatternBackground(
         gradientColors = listOf(Guinda, Borgona, AzulAcero),
@@ -128,7 +187,17 @@ fun LoginScreen(
                     label = "Contraseña",
                     icon = Icons.Filled.Lock,
                     modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = if (verContraseña) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        BotonOjoContraseña(
+                            visible = verContraseña,
+                            onAlternar = { verContraseña = !verContraseña }
+                        )
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -224,57 +293,35 @@ fun LoginScreen(
                             correo = correo,
                             contraseña = contraseña,
 
-                            onSuccess = { rol ->
+                            onSuccess = irSegunRol,
 
-                                when (rol.trim().lowercase()) {
+                            onError = { mensaje ->
 
-                                    "cliente" -> {
+                                Toast.makeText(
+                                    context,
+                                    mensaje,
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                                        navController.navigate(
-                                            Routes.HOME_CLIENTE
-                                        ) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-                                            popUpTo(Routes.LOGIN) {
-                                                inclusive = true
-                                            }
-                                        }
-                                    }
+                OutlineButton(
+                    text = "Continuar con Google",
+                    onClick = {
 
-                                    "artesano" -> {
+                        googleViewModel.continuarConGoogle(
+                            context = context,
 
-                                        navController.navigate(
-                                            Routes.HOME_ARTESANO
-                                        ) {
+                            onExistente = irSegunRol,
 
-                                            popUpTo(Routes.LOGIN) {
-                                                inclusive = true
-                                            }
-                                        }
-                                    }
-
-                                    "administrador" -> {
-
-                                        // El administrador no tiene Home propio más allá
-                                        // de esto — solo aprueba/rechaza RUAC (Fase 5).
-                                        navController.navigate(
-                                            Routes.ADMIN_RUAC_LIST
-                                        ) {
-
-                                            popUpTo(Routes.LOGIN) {
-                                                inclusive = true
-                                            }
-                                        }
-                                    }
-
-                                    else -> {
-
-                                        Toast.makeText(
-                                            context,
-                                            "El rol del usuario no es válido: $rol",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                }
+                            // Usuario nuevo: elige su rol antes de crear su documento.
+                            onNuevo = {
+                                navController.navigate(Routes.roleSelectionRoute(google = true))
                             },
 
                             onError = { mensaje ->
@@ -304,7 +351,7 @@ fun LoginScreen(
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable {
-                            navController.navigate(Routes.REGISTER)
+                            navController.navigate(Routes.roleSelectionRoute())
                         }
                     )
                 }

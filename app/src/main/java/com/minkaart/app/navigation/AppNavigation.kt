@@ -28,6 +28,7 @@ import com.minkaart2.app.ui.recognition.RecognitionScreen
 import com.minkaart2.app.ui.register.RegisterScreen
 import com.minkaart2.app.ui.ruac.RequestRuacScreen
 import com.minkaart2.app.ui.ruac.RuacBadgeScreen
+import com.minkaart2.app.ui.roleselection.RoleSelectionScreen
 import com.minkaart2.app.ui.sales.PurchaseHistoryScreen
 import com.minkaart2.app.ui.sales.QualityTrustScreen
 import com.minkaart2.app.ui.sales.RateSaleScreen
@@ -71,8 +72,43 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
             LoginScreen(navController)
         }
 
-        composable(Routes.REGISTER) {
-            RegisterScreen(navController)
+        composable(
+            route = Routes.ROLE_SELECTION,
+            arguments = listOf(
+                navArgument("google") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
+
+            RoleSelectionScreen(
+                navController = navController,
+                modoGoogle = backStackEntry.arguments?.getBoolean("google") ?: false
+            )
+        }
+
+        composable(
+            route = Routes.REGISTER,
+            arguments = listOf(
+                navArgument("rol") { type = NavType.StringType },
+                navArgument("google") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
+
+            val rol = backStackEntry.arguments?.getString("rol")
+
+            if (rol == "cliente" || rol == "artesano") {
+
+                RegisterScreen(
+                    navController = navController,
+                    rolElegido = rol,
+                    modoGoogleInicial = backStackEntry.arguments?.getBoolean("google") ?: false
+                )
+            }
         }
 
         composable(Routes.HOME_CLIENTE) {

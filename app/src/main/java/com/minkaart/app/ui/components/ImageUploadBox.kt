@@ -116,7 +116,7 @@ fun ImageUploadBox(
         }
 
         Text(
-            text = "$total/$maxImagenes imágenes",
+            text = "$total/$maxImagenes imágenes *",
             color = IconMuted,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(top = 4.dp)

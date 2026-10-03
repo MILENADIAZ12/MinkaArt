@@ -42,6 +42,7 @@ verifica de ninguna forma.
 | Reconocimiento visual — comparación (búsqueda real) | Firestore vector search (`Query.findNearest`, `DOT_PRODUCT`) sobre la colección `embeddingsVisuales`, con índice vectorial dedicado | — |
 | Reconocimiento visual — motor anterior (en transición, ver "Estado actual y pendientes") | MediaPipe Tasks Vision (`com.google.mediapipe:tasks-vision`, Image Embedder con MobileNet-V3 Large) + OpenCV/ORB — **ya no participan en la búsqueda real** de `RecognitionScreen`; siguen solo como línea base de comparación en "Evaluar búsqueda visual" (solo administrador), pendientes de eliminar tras confirmar esa comparación con fotos reales | 1.0.0 |
 | Cámara | CameraX (`camera-core`/`camera-camera2`/`camera-lifecycle`/`camera-view`) | 1.6.2 |
+| Inicio de sesión con Google | Credential Manager (`androidx.credentials` + `credentials-play-services-auth`) y `com.google.android.libraries.identity.googleid`, con `GoogleAuthProvider` de Firebase Auth — no se usa `GoogleSignInClient` (deprecado). Requiere `default_web_client_id` (ver "Inicio de sesión con Google" en Configuración y ejecución) | 1.3.0 / 1.3.0 / 1.1.1 |
 | `minSdk` / `targetSdk` / `compileSdk` | — | 31 / 36 / 36 |
 | JVM target | — | 11 |
 
@@ -159,6 +160,8 @@ app/src/main/
 │   ├── ClientProfileViewModel.kt
 │   ├── HomeArtesanoViewModel.kt
 │   ├── LikesViewModel.kt
+│   ├── GoogleSignInViewModel.kt # Credential Manager + Firebase Auth: continuarConGoogle,
+│   │                             # crear cliente nuevo, cancelar (cierra la sesión sin documento)
 │   ├── LoginViewModel.kt
 │   ├── NotificationsViewModel.kt # estado de la campana: lista + conteo de no leídas
 │   ├── ProductViewModel.kt
@@ -190,9 +193,13 @@ app/src/main/
     │   ├── GlassCard.kt           # tarjeta "de vidrio esmerilado"
     │   ├── GlassTextField.kt      # campo con ícono y línea inferior (fondo oscuro)
     │   ├── GradientButton.kt      # botón con degradado + variante outline
-    │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills (Registro, y
-    │   │                         # también el cambio de modo de los dos Home, con
-    │   │                         # colores propios vía parámetros opcionales)
+    │   ├── RolePillToggle.kt      # selector Artesano/Cliente en pills: cambio de modo de los
+    │   │                         # dos Home, con colores propios vía parámetros opcionales
+    │   │                         # (ya NO se usa en el Registro: el rol se elige antes,
+    │   │                         # en RoleSelectionScreen)
+    │   ├── BotonOjoContraseña.kt  # ojo mostrar/ocultar contraseña (trailingIcon de
+    │   │                         # GlassTextField); usa ic_visibility(_off) propios porque
+    │   │                         # no hay material-icons-extended
     │   ├── ImageUploadBox.kt      # selector de varias imágenes con miniaturas + eliminar
     │   │                         # (Publicar/Editar), hasta ProductViewModel.MAX_IMAGENES
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
@@ -221,6 +228,7 @@ app/src/main/
     ├── recognition/RecognitionScreen.kt # búsqueda visual real (cámara/galería, flash,
     │                                       # recorte ajustable estilo Google Lens)
     ├── register/RegisterScreen.kt
+    ├── roleselection/RoleSelectionScreen.kt # "¿Cómo quieres usar MinkaArt?": Soy artesano / Soy cliente
     ├── welcome/WelcomeScreen.kt
     └── theme/
         ├── Color.kt
@@ -281,7 +289,8 @@ de `AppNavigation.kt`:
 |---|---|---|---|---|
 | `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial) | — |
 | `LOGIN` | `login` | `LoginScreen` | Sí | `WelcomeScreen`, `LoginScreen` (recuperar contraseña) |
-| `REGISTER` | `register` | `RegisterScreen` | Sí | `WelcomeScreen` |
+| `ROLE_SELECTION` | `role_selection?google={google}` | `RoleSelectionScreen` | Sí, con argumento opcional `google` (Bool, por defecto `false`) | `WelcomeScreen` ("Registrarse"), `LoginScreen` ("Regístrate" y usuario nuevo de Google, con `google=true`) |
+| `REGISTER` | `register/{rol}?google={google}` | `RegisterScreen` | Sí, con argumento `rol` (`cliente`/`artesano`; otro valor no renderiza nada) y `google` opcional | `RoleSelectionScreen` (`Routes.registerRoute(rol, google)`) |
 | `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`), toggle "Cliente" del encabezado de `HomeArtesanoScreen` (cambio de modo) |
 | `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`), toggle "Artesano" del encabezado de `HomeClienteScreen` y fila "Cambiar a modo artesano" de `ClientProfileScreen` (ambos solo si el usuario es artesano — vuelven al modo artesano) |
 | `MY_PRODUCTS` | `my_products` | `MyProductsScreen` (Panel de Publicaciones) | Sí | `HomeArtesanoScreen` |
@@ -297,7 +306,7 @@ de `AppNavigation.kt`:
 | `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
 | `RECOGNITION` | `recognition` | `RecognitionScreen` (búsqueda visual real, ya no placeholder) | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
 | `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RegisterScreen` (enlace "¿Eres administrador?") |
-| `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`) |
+| `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`; también al entrar con Google siendo administrador) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
 | `ADMIN_VISUAL_EVAL` | `admin_visual_eval` | `AdminVisualEvalScreen` | Sí | `AdminRuacListScreen` (enlace "Evaluar búsqueda visual" en el encabezado) |
@@ -708,8 +717,14 @@ pueda reutilizarse.
 
 ## Flujos principales
 
-- **Registro** (`RegisterScreen` → `RegisterViewModel`): valida nombre, correo y
-  contraseña (mínimo 6 caracteres) para cualquier rol; si el rol es `artesano`, exige
+- **Registro** (`RoleSelectionScreen` → `RegisterScreen` → `RegisterViewModel`): primero
+  `WelcomeScreen` → "Registrarse" lleva a `RoleSelectionScreen`, que pregunta "¿Cómo quieres
+  usar MinkaArt?" ("Soy artesano" / "Soy cliente") y navega a `register/{rol}`.
+  `RegisterScreen` ya no tiene selector de rol: muestra "Te registras como …" con un botón
+  "Cambiar rol" que vuelve atrás. Valida nombre, correo, contraseña (mínimo 6
+  caracteres) y **"Confirmar contraseña"** (si no coinciden: "Las contraseñas no
+  coinciden", sin enviar el código; `AdminRegisterScreen` valida lo mismo) para cualquier
+  rol; todos los campos de contraseña tienen un ojo para mostrarla/ocultarla; si el rol es `artesano`, exige
   además teléfono, fecha de nacimiento, región, productos que vende y al menos una
   categoría. Si `tieneRuac == true`, exige número y documento. El registro se completa
   en dos pasos, con verificación de correo por código de 6 dígitos generado por Cloud
@@ -735,9 +750,30 @@ pueda reutilizarse.
      correctamente". Si el código es incorrecto, expiró o se agotaron los intentos, se
      muestra el mensaje de error correspondiente y **los datos del formulario no se
      pierden**: el usuario puede reintentar o reenviar el código sin volver a llenarlo.
+
+  **Registro con Google** (botón "Continuar con Google" en `RegisterScreen` y
+  `LoginScreen`): `GoogleSignInViewModel` → `AuthRepository.obtenerTokenGoogle` (Credential
+  Manager, `getCredentialAsync` con callback) → `iniciarSesionConGoogle` (`GoogleAuthProvider`)
+  → `consultarRolSiExiste`. Si `usuarios/{uid}` ya existe, se enruta por rol como el login
+  normal. Si no existe (usuario nuevo): **cliente** → se crea el documento con el nombre y
+  correo de Google y entra a `HOME_CLIENTE`; **artesano** → `RegisterScreen` pasa a "modo
+  Google" (sin contraseña ni código de verificación — Google ya verificó el correo), pide
+  los mismos datos obligatorios del artesano con la misma validación
+  (`RegisterViewModel.validarDatosArtesano`, compartida con el registro por correo) y
+  `completarRegistroGoogle` crea el documento. Con Google **nunca** se crea un
+  administrador (`crearClienteConGoogle` solo escribe `rol = "cliente"`; el artesano lo
+  escribe `RegisterViewModel` con `rol = "artesano"`). Si el correo ya existe con
+  contraseña y Firebase lanza `FirebaseAuthUserCollisionException`, se muestra "Este correo
+  ya está registrado con contraseña, inicia sesión con tu contraseña". Quien abandona el
+  registro en modo Google queda con cuenta en Auth pero sin documento: "Cambiar rol"/
+  "Volver" cierran esa sesión, y si igual vuelve a entrar con Google se le pide el rol de
+  nuevo.
 - **Login** (`LoginScreen` → `LoginViewModel` → `AuthRepository`): autentica con
   Firebase Auth y luego consulta el campo `rol` en `usuarios/{uid}` para decidir el
-  destino (`HOME_CLIENTE` o `HOME_ARTESANO`), limpiando `LOGIN` del back stack.
+  destino (`HOME_CLIENTE`, `HOME_ARTESANO` o `ADMIN_RUAC_LIST`), limpiando `LOGIN` del back
+  stack. El campo de contraseña tiene ojo para mostrarla. "Continuar con Google" usa el
+  mismo enrutado (`irSegunRol`); si la cuenta de Google es nueva (sin documento) lleva a
+  `RoleSelectionScreen` con `google=true` antes de crear nada.
 - **Publicar artesanía** (`PublicationScreen` → `ProductViewModel` → `ProductRepository`):
   valida todos los campos y que haya al menos una imagen seleccionada (máximo
   `ProductViewModel.MAX_IMAGENES` = 15, elegidas con
@@ -1048,7 +1084,14 @@ pueda reutilizarse.
   ver "Diseño y marca"). El botón "Contactar artesano" usa `contactoPublico` (con `telefono` como
   respaldo si el artesano no lo configuró), limpia el número a solo dígitos y abre
   `https://wa.me/<numero>?text=<mensaje>` con un intent `ACTION_VIEW`; si no hay ninguna
-  app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual.
+  app que lo resuelva, cae a `ACTION_DIAL` con el número tal cual. El mensaje incluye el
+  **nombre y el correo** de quien contacta (`ProductDetailViewModel.obtenerDatosDelContacto`,
+  que lee su documento de `usuarios`; si falla, usa el correo de Firebase Auth) para que el
+  artesano pueda registrar la venta en `RegisterSaleScreen` con ese correo.
+- **Campos obligatorios**: las etiquetas de los campos obligatorios llevan ` *` y cada
+  formulario muestra la leyenda "* Campos obligatorios": Registro (incluido el de
+  administrador), Publicar producto y Editar producto (todo salvo "Clasificación (opcional)";
+  también el contador de imágenes). Las validaciones siguen viviendo en los ViewModel.
 - **Perfil del artesano** (`ArtisanProfileScreen` → `ArtisanProfileViewModel`): cabecera
   con el mismo patrón + degradado de Entrada/Login (`PatternBackground`), avatar, chip de
   RUAC, bio y contacto público, estadísticas (cantidad de productos, suma de `likes`),
@@ -1102,10 +1145,15 @@ pueda reutilizarse.
   ver la advertencia de seguridad más abajo para la razón exacta y el trade-off aceptado.
 - **Registrar venta, Valorar compra, Calidad y confianza (Fase 6)**: desde el menú de tres
   puntos de una fila en `MyProductsScreen`, "Registrar venta" abre `RegisterSaleScreen`
-  con el producto ya elegido (de solo lectura); busca el cliente en memoria por
-  nombre/correo (`AuthRepository.obtenerClientes` + `normalizar()`, mismo criterio que los
-  demás buscadores del proyecto) entre los usuarios con `rol == "cliente"`, elige una
-  fecha (por defecto hoy) y confirma → `SaleRepository.registrarVenta`.
+  con el producto ya elegido (de solo lectura). **Ya no hay buscador de clientes**: el
+  artesano escribe el **correo completo** del cliente y la pantalla lo compara (sin
+  distinguir mayúsculas) contra los usuarios con `rol == "cliente"`
+  (`AuthRepository.obtenerClientes`, cargados una vez al abrir). Debajo del campo muestra
+  "Correo correcto · <nombre>" en verde (`VerdeConfirmacion`) o "No existe" en rojo
+  (`colorScheme.error`; solo cuando la lista de clientes ya cargó). "Confirmar venta" queda
+  deshabilitado hasta que el correo exista; luego elige una fecha (por defecto hoy) y
+  confirma → `SaleRepository.registrarVenta`. El correo llega al artesano en el mensaje de
+  WhatsApp que arma "Contactar artesano" (ver Detalle de producto).
 
   El cliente ve esa venta en `PurchaseHistoryScreen` (reemplaza el placeholder de
   "Historial de compras") como "Pendiente de valorar"; al abrirla, `RateSaleScreen` valida
@@ -1182,6 +1230,7 @@ mapeada a roles de Material 3 en `Theme.kt`:
 
 | Token | Hex | Uso |
 |---|---|---|
+| `VerdeConfirmacion` | `#2E7D32` | Mensajes de validación correcta (p. ej. "Correo correcto" en Registrar venta) |
 | `Guinda` | `#3B0F1A` | Vinotinto profundo — fondos oscuros, texto principal |
 | `Borgona` | `#66172E` | Marca, botones, degradados |
 | `AzulClaro` | `#B7C7D9` | Detalles, fondos suaves |
@@ -1272,6 +1321,21 @@ firebase deploy --only functions
 
 Detalle de la configuración en `functions/SETUP.md`.
 
+### Inicio de sesión con Google
+
+Pasos manuales en Firebase Console (el código ya está, pero no funciona sin esto):
+
+1. **Authentication → Sign-in method**: activar el proveedor **Google** (con un correo de
+   soporte) y guardar.
+2. **Project settings → tu app Android**: agregar la huella **SHA-1** (y SHA-256) del
+   keystore con el que se firma — para debug, `.gradlew.bat signingReport`; si se publica
+   un release, también la de ese keystore.
+3. **Descargar de nuevo `google-services.json`** y reemplazar `app/google-services.json`.
+   Debe traer un `oauth_client` con `client_type: 3`: de ahí el plugin de google-services
+   genera `R.string.default_web_client_id`, que usa `GoogleSignInViewModel`. **Sin ese
+   archivo actualizado el proyecto no compila** (`default_web_client_id` no existe).
+4. El dispositivo/emulador necesita una cuenta de Google y Google Play Services.
+
 ### Configuración de Google Cloud (búsqueda visual)
 
 El proyecto `minka-art` necesita, además de lo que ya configura Firebase, lo siguiente en
@@ -1311,6 +1375,8 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
 ## Estado actual y pendientes
 
 **Implementado**
+- Selección de rol antes del registro (`RoleSelectionScreen`), ojo para ver la contraseña,
+  "Confirmar contraseña" (Registro y Admin) y "Continuar con Google" en Login y Registro.
 - Registro de cliente y artesano (con validaciones), incluido el flujo de RUAC.
 - Login con Firebase Auth y enrutado según rol.
 - Publicación de una artesanía con imagen, historia y datos comerciales, con el diseño del
@@ -1398,6 +1464,17 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
   visual" en Flujos principales.
 
 **Pendiente / placeholder**
+- **Google Sign-In sin configurar en el repo**: `app/google-services.json` todavía tiene
+  `"oauth_client": []`, así que `R.string.default_web_client_id` no existe y el proyecto no
+  compila hasta seguir los pasos de "Inicio de sesión con Google" (Configuración y
+  ejecución). No se probó en dispositivo: queda por verificar el caso de un correo que ya
+  existe con contraseña — como el registro por código no marca `emailVerified` en Firebase
+  Auth, Firebase podría reemplazar ese proveedor en vez de lanzar la colisión.
+- **Regla de Firestore permisiva en `usuarios`** (archivo `y`): `allow create` solo exige
+  `request.auth.uid == userId`, sin restringir `rol`, así que desde fuera de la app se
+  podría crear un documento propio con `rol = "administrador"` (también antes de Google).
+  La app nunca lo hace con Google, pero la regla no lo impide; cerrarlo exige mover la
+  validación del PIN de administrador al servidor.
 - `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
   pantalla (`ARTISAN_PROFILE`/`CLIENT_PROFILE` lo reemplazaron), se dejó sin tocar ni
   eliminar por quedar fuera del alcance de la Fase 4.

@@ -1,7 +1,23 @@
 package com.minkaart2.app.repository
 
+import android.content.Context
 import android.net.Uri
+import android.os.CancellationSignal
+import androidx.core.content.ContextCompat
+import androidx.credentials.CredentialManager
+import androidx.credentials.CredentialManagerCallback
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctionsException
@@ -214,6 +230,47 @@ class AuthRepository {
             }
     }
 
+    /**
+     * Sube la foto de perfil a Storage (usuarios/{uid}/foto_perfil, un solo archivo —
+     * cada subida nueva reemplaza a la anterior) y guarda la URL en
+     * usuarios/{uid}.fotoUrl. Mismo patrón subir-y-luego-guardar-URL que
+     * enviarSolicitudRuac. Sirve tanto para cliente como para artesano.
+     */
+    fun subirFotoPerfil(
+        uid: String,
+        fotoUri: Uri,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val referenciaFoto = storage.reference
+            .child("usuarios")
+            .child(uid)
+            .child("foto_perfil")
+
+        referenciaFoto
+            .putFile(fotoUri)
+            .addOnSuccessListener {
+
+                referenciaFoto.downloadUrl
+                    .addOnSuccessListener { url ->
+
+                        actualizarCamposUsuario(
+                            uid = uid,
+                            campos = mapOf("fotoUrl" to url.toString()),
+                            onSuccess = { onSuccess(url.toString()) },
+                            onError = onError
+                        )
+                    }
+                    .addOnFailureListener { error ->
+                        onError(error.message ?: "Error al obtener la URL de la foto de perfil")
+                    }
+            }
+            .addOnFailureListener { error ->
+                onError(error.message ?: "Error al subir la foto de perfil")
+            }
+    }
+
     fun cerrarSesion() {
         auth.signOut()
     }
@@ -323,6 +380,175 @@ class AuthRepository {
 
             else -> excepcion.message ?: "No pudimos verificar el código. Intenta de nuevo."
         }
+    }
+
+    // =========================
+    // GOOGLE (Credential Manager + GoogleAuthProvider de Firebase Auth)
+    // =========================
+
+    /**
+     * Pide a Credential Manager la cuenta de Google y devuelve su ID token. Usa la versión
+     * con callback (`getCredentialAsync`) en vez de la `suspend`, para mantener la
+     * convención del proyecto de no usar corrutinas. [context] debe ser el de la Activity.
+     */
+    fun obtenerTokenGoogle(
+        context: Context,
+        webClientId: String,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val opcionGoogle = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(webClientId)
+            .build()
+
+        val solicitud = GetCredentialRequest.Builder()
+            .addCredentialOption(opcionGoogle)
+            .build()
+
+        CredentialManager.create(context).getCredentialAsync(
+            context,
+            solicitud,
+            CancellationSignal(),
+            ContextCompat.getMainExecutor(context),
+            object : CredentialManagerCallback<GetCredentialResponse, GetCredentialException> {
+
+                override fun onResult(result: GetCredentialResponse) {
+
+                    val credencial = result.credential
+
+                    if (
+                        credencial is CustomCredential &&
+                        credencial.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                    ) {
+                        try {
+                            onSuccess(GoogleIdTokenCredential.createFrom(credencial.data).idToken)
+                        } catch (error: GoogleIdTokenParsingException) {
+                            onError(error.message ?: "No se pudo leer la cuenta de Google")
+                        }
+                    } else {
+                        onError("No se pudo obtener la cuenta de Google")
+                    }
+                }
+
+                override fun onError(e: GetCredentialException) {
+
+                    onError(
+                        when (e) {
+                            is GetCredentialCancellationException ->
+                                "Inicio de sesión con Google cancelado"
+
+                            is NoCredentialException ->
+                                "No hay una cuenta de Google disponible en este dispositivo"
+
+                            else -> e.message ?: "Error al continuar con Google"
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    /**
+     * Autentica en Firebase con el ID token de Google. Si el correo ya existe con otro
+     * método (correo y contraseña) devuelve un mensaje claro en vez del error genérico.
+     */
+    fun iniciarSesionConGoogle(
+        idToken: String,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null))
+            .addOnSuccessListener { resultado ->
+
+                val uid = resultado.user?.uid
+
+                if (uid == null) {
+                    onError("No se pudo obtener el usuario autenticado")
+                } else {
+                    onSuccess(uid)
+                }
+            }
+            .addOnFailureListener { error ->
+
+                onError(
+                    if (error is FirebaseAuthUserCollisionException) {
+                        "Este correo ya está registrado con contraseña, " +
+                                "inicia sesión con tu contraseña"
+                    } else {
+                        error.message ?: "Error al continuar con Google"
+                    }
+                )
+            }
+    }
+
+    /** Rol del usuario si ya tiene documento en `usuarios`; si no, [onNoExiste]. */
+    fun consultarRolSiExiste(
+        uid: String,
+        onExiste: (String) -> Unit,
+        onNoExiste: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        firestore.collection("usuarios")
+            .document(uid)
+            .get()
+            .addOnSuccessListener { documento ->
+
+                val rol = documento.getString("rol")
+
+                if (documento.exists() && rol != null) {
+                    onExiste(rol)
+                } else {
+                    onNoExiste()
+                }
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error al consultar el usuario")
+            }
+    }
+
+    /** Nombre y correo de la cuenta autenticada (los que trae Google). */
+    fun datosCuentaActual(): Pair<String, String> {
+
+        val usuario = auth.currentUser
+
+        return Pair(usuario?.displayName ?: "", usuario?.email ?: "")
+    }
+
+    /**
+     * Crea el documento de un usuario cliente que acaba de autenticarse con Google
+     * (el artesano pasa por `RegisterViewModel.completarRegistroGoogle`, que pide sus
+     * datos obligatorios). Nunca crea un administrador.
+     */
+    fun crearClienteConGoogle(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val usuario = auth.currentUser
+
+        if (usuario == null) {
+            onError("No se pudo obtener el usuario autenticado")
+            return
+        }
+
+        val cliente = User(
+            uid = usuario.uid,
+            nombre = usuario.displayName ?: "",
+            correo = usuario.email ?: "",
+            rol = "cliente"
+        )
+
+        firestore.collection("usuarios")
+            .document(usuario.uid)
+            .set(cliente)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener {
+                onError(it.message ?: "Error al guardar los datos del usuario")
+            }
     }
 
     // =========================

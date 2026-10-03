@@ -6,7 +6,17 @@ object Routes {
 
     const val LOGIN = "login"
 
-    const val REGISTER = "register"
+    // Argumento `rol` ("cliente" | "artesano"); `google` es true cuando la persona ya se
+    // autenticó con Google y solo falta completar su registro (ver RegisterScreen).
+    const val REGISTER = "register/{rol}?google={google}"
+
+    fun registerRoute(rol: String, google: Boolean = false) = "register/$rol?google=$google"
+
+    // Elegir el rol ANTES de registrarse. `google` es true cuando llega alguien nuevo
+    // autenticado con Google desde Login: aún no tiene documento en `usuarios`.
+    const val ROLE_SELECTION = "role_selection?google={google}"
+
+    fun roleSelectionRoute(google: Boolean = false) = "role_selection?google=$google"
 
     const val HOME_CLIENTE = "home_cliente"
 

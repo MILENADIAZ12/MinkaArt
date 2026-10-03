@@ -47,6 +47,7 @@ class RegisterViewModel : ViewModel() {
         nombre: String,
         correo: String,
         contraseña: String,
+        confirmarContraseña: String,
         rol: String,
         telefono: String = "",
         fechaNacimiento: String = "",
@@ -79,48 +80,31 @@ class RegisterViewModel : ViewModel() {
             return
         }
 
+        if (contraseña != confirmarContraseña) {
+            onError("Las contraseñas no coinciden")
+            return
+        }
+
         // =========================
         // VALIDACIONES ARTESANO
         // =========================
 
         if (rol == "artesano") {
 
-            if (telefono.isBlank()) {
-                onError("Ingresa tu número de teléfono")
+            val errorArtesano = validarDatosArtesano(
+                telefono = telefono,
+                fechaNacimiento = fechaNacimiento,
+                region = region,
+                productosQueVende = productosQueVende,
+                categoriasArtesanales = categoriasArtesanales,
+                tieneRuac = tieneRuac,
+                numeroRuac = numeroRuac,
+                ruacUri = ruacUri
+            )
+
+            if (errorArtesano != null) {
+                onError(errorArtesano)
                 return
-            }
-
-            if (fechaNacimiento.isBlank()) {
-                onError("Selecciona tu fecha de nacimiento")
-                return
-            }
-
-            if (region.isBlank()) {
-                onError("Ingresa tu región")
-                return
-            }
-
-            if (productosQueVende.isBlank()) {
-                onError("Indica qué productos artesanales vendes")
-                return
-            }
-
-            if (categoriasArtesanales.isEmpty()) {
-                onError("Ingresa al menos una categoría artesanal")
-                return
-            }
-
-            if (tieneRuac) {
-
-                if (numeroRuac.isBlank()) {
-                    onError("Ingresa el número de registro RUAC")
-                    return
-                }
-
-                if (ruacUri == null) {
-                    onError("Debes adjuntar tu documento RUAC")
-                    return
-                }
             }
         }
 
@@ -154,6 +138,134 @@ class RegisterViewModel : ViewModel() {
 
             onError = onError
         )
+    }
+
+    // =========================
+    // VALIDACIÓN DE LOS DATOS OBLIGATORIOS DEL ARTESANO
+    // (compartida por el registro con correo y por el registro con Google)
+    // =========================
+
+    private fun validarDatosArtesano(
+        telefono: String,
+        fechaNacimiento: String,
+        region: String,
+        productosQueVende: String,
+        categoriasArtesanales: List<String>,
+        tieneRuac: Boolean,
+        numeroRuac: String,
+        ruacUri: Uri?
+    ): String? {
+
+        if (telefono.isBlank()) return "Ingresa tu número de teléfono"
+
+        if (fechaNacimiento.isBlank()) return "Selecciona tu fecha de nacimiento"
+
+        if (region.isBlank()) return "Ingresa tu región"
+
+        if (productosQueVende.isBlank()) return "Indica qué productos artesanales vendes"
+
+        if (categoriasArtesanales.isEmpty()) return "Ingresa al menos una categoría artesanal"
+
+        if (tieneRuac) {
+
+            if (numeroRuac.isBlank()) return "Ingresa el número de registro RUAC"
+
+            if (ruacUri == null) return "Debes adjuntar tu documento RUAC"
+        }
+
+        return null
+    }
+
+    /** Nombre y correo de la cuenta de Google ya autenticada. */
+    fun datosCuentaGoogle(): Pair<String, String> = authRepository.datosCuentaActual()
+
+    // =========================
+    // REGISTRO DE ARTESANO CON GOOGLE
+    // Google ya verificó el correo y la cuenta de Firebase Auth ya existe: no hay código
+    // de 6 dígitos ni contraseña, solo los datos obligatorios del artesano.
+    // =========================
+
+    fun completarRegistroGoogle(
+        telefono: String,
+        fechaNacimiento: String,
+        region: String,
+        productosQueVende: String,
+        categoriasArtesanales: List<String>,
+        tieneRuac: Boolean,
+        numeroRuac: String,
+        ruacUri: Uri?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val usuario = auth.currentUser
+
+        if (usuario == null) {
+            onError("No se pudo obtener el usuario autenticado")
+            return
+        }
+
+        val errorArtesano = validarDatosArtesano(
+            telefono = telefono,
+            fechaNacimiento = fechaNacimiento,
+            region = region,
+            productosQueVende = productosQueVende,
+            categoriasArtesanales = categoriasArtesanales,
+            tieneRuac = tieneRuac,
+            numeroRuac = numeroRuac,
+            ruacUri = ruacUri
+        )
+
+        if (errorArtesano != null) {
+            onError(errorArtesano)
+            return
+        }
+
+        val datos = DatosRegistroPendiente(
+            nombre = usuario.displayName ?: "",
+            correo = usuario.email ?: "",
+            contraseña = "",
+            rol = "artesano",
+            telefono = telefono,
+            fechaNacimiento = fechaNacimiento,
+            region = region,
+            productosQueVende = productosQueVende,
+            categoriasArtesanales = categoriasArtesanales,
+            tieneRuac = tieneRuac,
+            numeroRuac = numeroRuac,
+            ruacUri = if (tieneRuac) ruacUri else null
+        )
+
+        if (datos.tieneRuac && datos.ruacUri != null) {
+
+            subirRuac(
+                uid = usuario.uid,
+                ruacUri = datos.ruacUri,
+
+                onSuccess = { ruacUrl ->
+
+                    guardarUsuario(
+                        uid = usuario.uid,
+                        datos = datos,
+                        ruacUrl = ruacUrl,
+                        onSuccess = onSuccess,
+                        onError = onError
+                    )
+                },
+
+                onError = onError
+            )
+
+        } else {
+
+            guardarUsuario(
+                uid = usuario.uid,
+                datos = datos,
+                ruacUrl = "",
+                onSuccess = onSuccess,
+                onError = onError
+            )
+        }
     }
 
     // =========================

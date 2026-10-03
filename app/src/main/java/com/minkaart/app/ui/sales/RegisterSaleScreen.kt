@@ -19,15 +19,13 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -50,15 +48,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
-import com.minkaart2.app.data.model.User
 import com.minkaart2.app.ui.components.GradientButton
-import com.minkaart2.app.util.normalizar
+import com.minkaart2.app.ui.theme.VerdeConfirmacion
 import com.minkaart2.app.viewModel.RegisterSaleViewModel
 import java.time.Instant
 import java.time.ZoneOffset
@@ -68,7 +66,6 @@ import java.util.Date
 private val Guinda = Color(0xFF3B0F1A)
 private val Borgona = Color(0xFF66172E)
 private val AzulClaro = Color(0xFFB7C7D9)
-private val AzulAcero = Color(0xFF55708E)
 private val Marfil = Color(0xFFF2EDE6)
 private val TextoSecundario = Color(0xFF8A7480)
 private val LineSoft = Color(0xFFEFE6E8)
@@ -90,10 +87,10 @@ fun RegisterSaleScreen(
 
     val producto by viewModel.producto
     val clientes by viewModel.clientes
+    val clientesCargados by viewModel.clientesCargados
     val cargando by viewModel.cargando
 
-    var textoBusqueda by remember { mutableStateOf("") }
-    var clienteSeleccionado by remember { mutableStateOf<User?>(null) }
+    var correoCliente by remember { mutableStateOf("") }
     var mostrarCalendario by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
@@ -113,18 +110,16 @@ fun RegisterSaleScreen(
         )
     }
 
-    val resultadosBusqueda = remember(clientes, textoBusqueda) {
+    // El artesano escribe el correo completo del cliente (que el cliente le manda por
+    // WhatsApp desde "Contactar artesano"); se valida contra los clientes registrados.
+    val clienteEncontrado = remember(clientes, correoCliente) {
 
-        if (textoBusqueda.isBlank()) {
-            emptyList()
+        val correoBuscado = correoCliente.trim()
+
+        if (correoBuscado.isBlank()) {
+            null
         } else {
-
-            val textoNormalizado = normalizar(textoBusqueda)
-
-            clientes.filter { cliente ->
-                normalizar(cliente.nombre).contains(textoNormalizado) ||
-                    normalizar(cliente.correo).contains(textoNormalizado)
-            }
+            clientes.firstOrNull { it.correo.trim().equals(correoBuscado, ignoreCase = true) }
         }
     }
 
@@ -249,7 +244,7 @@ fun RegisterSaleScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "CLIENTE",
+                    text = "CORREO DEL CLIENTE *",
                     color = Borgona,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
@@ -266,7 +261,7 @@ fun RegisterSaleScreen(
                 ) {
 
                     Icon(
-                        imageVector = Icons.Filled.Search,
+                        imageVector = Icons.Filled.Email,
                         contentDescription = null,
                         tint = TextoSecundario,
                         modifier = Modifier.size(16.dp)
@@ -274,19 +269,20 @@ fun RegisterSaleScreen(
 
                     Box(modifier = Modifier.padding(start = 8.dp)) {
 
-                        if (textoBusqueda.isEmpty()) {
+                        if (correoCliente.isEmpty()) {
 
                             Text(
-                                text = "Buscar por nombre o correo…",
+                                text = "correo@ejemplo.com",
                                 color = TextoSecundario,
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
 
                         BasicTextField(
-                            value = textoBusqueda,
-                            onValueChange = { textoBusqueda = it },
+                            value = correoCliente,
+                            onValueChange = { correoCliente = it },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
                             cursorBrush = SolidColor(Borgona),
                             modifier = Modifier.fillMaxWidth()
@@ -294,103 +290,25 @@ fun RegisterSaleScreen(
                     }
                 }
 
-                if (resultadosBusqueda.isNotEmpty()) {
-
-                    Column(
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .fillMaxWidth()
-                    ) {
-
-                        resultadosBusqueda.take(5).forEach { cliente ->
-
-                            ClienteResultRow(
-                                cliente = cliente,
-                                onClick = {
-                                    clienteSeleccionado = cliente
-                                    textoBusqueda = ""
-                                }
-                            )
-                        }
-                    }
-
-                } else if (textoBusqueda.isNotBlank()) {
+                if (correoCliente.isNotBlank() && clienteEncontrado != null) {
 
                     Text(
-                        text = "No se encontraron clientes con ese criterio",
-                        color = TextoSecundario,
+                        text = "Correo correcto · ${clienteEncontrado.nombre}",
+                        color = VerdeConfirmacion,
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(top = 6.dp)
                     )
 
-                } else {
+                } else if (correoCliente.isNotBlank() && clientesCargados) {
 
-                    val seleccionado = clienteSeleccionado
-
-                    if (seleccionado != null) {
-
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 10.dp)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
-                                .border(1.4.dp, AzulClaro, RoundedCornerShape(12.dp))
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(AzulClaro),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Person,
-                                    contentDescription = null,
-                                    tint = Guinda,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 9.dp)
-                            ) {
-
-                                Text(
-                                    text = seleccionado.nombre,
-                                    color = Guinda,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Text(
-                                    text = seleccionado.correo,
-                                    color = TextoSecundario,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(AzulAcero),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                            }
-                        }
-                    }
+                    Text(
+                        text = "No existe",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -429,10 +347,10 @@ fun RegisterSaleScreen(
 
                 GradientButton(
                     text = "Confirmar venta",
-                    enabled = clienteSeleccionado != null,
+                    enabled = clienteEncontrado != null,
                     onClick = {
 
-                        val cliente = clienteSeleccionado ?: return@GradientButton
+                        val cliente = clienteEncontrado ?: return@GradientButton
 
                         viewModel.registrarVenta(
                             clienteId = cliente.uid,
@@ -492,57 +410,6 @@ fun RegisterSaleScreen(
         ) {
 
             DatePicker(state = datePickerState)
-        }
-    }
-}
-
-@Composable
-private fun ClienteResultRow(
-    cliente: User,
-    onClick: () -> Unit
-) {
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(AzulClaro),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = Guinda,
-                modifier = Modifier.size(14.dp)
-            )
-        }
-
-        Column(modifier = Modifier.padding(start = 9.dp)) {
-
-            Text(
-                text = cliente.nombre,
-                color = Guinda,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Text(
-                text = cliente.correo,
-                color = TextoSecundario,
-                style = MaterialTheme.typography.labelSmall
-            )
         }
     }
 }
