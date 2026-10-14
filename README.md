@@ -188,8 +188,9 @@ app/src/main/
 └── ui/
     ├── admin/                     # Rol "administrador" (Fase 5)
     │   ├── AdminRegisterScreen.kt  # formulario mínimo: correo, contraseña, PIN
-    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes + enlace "Evaluar
-    │   │                           # búsqueda visual" (no genera huellas, solo evalúa)
+    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes + botón "Evaluar
+    │   │                           # búsqueda visual" (a la derecha, bajo el encabezado; no
+    │   │                           # genera huellas, solo evalúa)
     │   ├── AdminRuacReviewScreen.kt # aprobar/rechazar una solicitud
     │   └── AdminVisualEvalScreen.kt # evaluación con fotos de prueba: Solo ORB / Híbrido
     │                                 # (anterior) vs. Nuevo — Vertex AI (buena/poca luz)
@@ -279,7 +280,8 @@ app/src/main/res/
 ├── values/strings.xml              # textos en español (idioma por defecto)
 ├── values-en/strings.xml           # textos en inglés — toda clave nueva va en los DOS
 ├── xml/locales_config.xml          # idiomas ofrecidos (es, en) en Ajustes del sistema
-└── drawable/logo1.png (logo oficial MINKA ART), ic_artesano.xml, ic_cliente.xml, ic_filtros.xml  # vectores propios; img_rol_artesano.jpg / img_rol_cliente.jpg: fotos de las tarjetas de RoleSelectionScreen (no hay
+├── mipmap-anydpi/ic_launcher.xml, ic_launcher_round.xml  # ícono adaptativo de la app (ver "Ícono de la app" en Diseño y marca)
+└── drawable/logo1.png (logo oficial MINKA ART), logo2.png (el mismo logo en 1024×1024, solo para el ícono de la app), ic_launcher_background.xml (color sólido #4B1022), ic_launcher_foreground_minka.xml (logo2 con inset 4 %), ic_artesano.xml, ic_cliente.xml, ic_filtros.xml  # vectores propios; img_rol_artesano.jpg / img_rol_cliente.jpg: fotos de las tarjetas de RoleSelectionScreen (no hay
                                     # material-icons-extended)
 ```
 
@@ -351,7 +353,7 @@ de `AppNavigation.kt`:
 | `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`; también al entrar con Google siendo administrador), arranque con sesión guardada (`AppNavigation`) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
-| `ADMIN_VISUAL_EVAL` | `admin_visual_eval` | `AdminVisualEvalScreen` | Sí | `AdminRuacListScreen` (enlace "Evaluar búsqueda visual" en el encabezado) |
+| `ADMIN_VISUAL_EVAL` | `admin_visual_eval` | `AdminVisualEvalScreen` | Sí | `AdminRuacListScreen` (botón "Evaluar búsqueda visual", a la derecha bajo el encabezado) |
 | `REGISTER_SALE` | `register_sale/{productId}` | `RegisterSaleScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → "Registrar venta") |
 | `RATE_SALE` | `rate_sale/{ventaId}` | `RateSaleScreen` | Sí, con argumento de ruta | `PurchaseHistoryScreen` (venta "Pendiente de valorar") |
 | `QUALITY_TRUST` | `quality_trust/{productId}` | `QualityTrustScreen` | Sí, con argumento de ruta | `ProductDetailScreen` (bloque de calidad/confianza), `ArtisanProfileScreen` (indicador de confianza) |
@@ -1150,7 +1152,7 @@ pueda reutilizarse.
   resto de `vision/`.
 
 - **Evaluación de la búsqueda visual** (`AdminVisualEvalScreen` →
-  `VisualEvalViewModel`, solo rol administrador — enlace "Evaluar búsqueda visual" en el
+  `VisualEvalViewModel`, solo rol administrador — botón "Evaluar búsqueda visual" bajo el
   encabezado de `AdminRuacListScreen`): compara **tres** métodos sobre el mismo conjunto
   de fotos de prueba, midiendo si el producto correcto o uno de su misma categoría
   aparece en el top 1/5/10 de cada uno — pensada para el sustento del documento de grado,
@@ -1451,6 +1453,20 @@ Bienvenida (`LogoMinka`: logo + eslogan, que reemplazó al antiguo `welcome_lema
 eliminado) y en el encabezado de Home cliente y Home artesano (solo logo + eslogan) y del
 panel del administrador "Solicitudes de RUAC" (con su título) — `LogoMinkaEncabezado`.
 Login, Selección de rol y Registro no llevan logo. No hay Splash Screen.
+
+**Ícono de la app**: ícono adaptativo (`mipmap-anydpi/ic_launcher.xml` y
+`ic_launcher_round.xml`) con `ic_launcher_foreground_minka.xml` (`logo2.png`, el logo en
+1024×1024, con `inset` del 4 %: las letras quedan dentro de la zona segura de 66 dp)
+sobre `ic_launcher_background.xml`, un color sólido `#4B1022` muestreado de los bordes del
+logo. No tiene capa `monochrome` (con íconos
+temáticos de Android 13+ el sistema usa el ícono normal). `ic_launcher_foreground.xml` (el
+vector heredado) **se conserva solo como ícono pequeño de las notificaciones**
+(`MinkaMessagingService.setSmallIcon`, que debe ser monocromo con transparencia). Los
+`.webp` de `mipmap-mdpi…xxxhdpi` son heredados y no se usan (`minSdk` 31 siempre toma el
+ícono adaptativo). `logo1.png` (el que usan las pantallas) mide solo 416×431 px, por eso el
+ícono usa `logo2.png` (1024×1024, convertido desde un `.jfif`; el original quedó en la raíz
+del repositorio como `logo2_original.jfif`, fuera de `res/` porque Android no admite esa
+extensión). Si se quiere, `LogoCircular` puede pasar a usar `logo2` también.
 
 Las pantallas de Entrada, Login y Registro usan además el patrón textil
 `res/drawable/bg_pattern_tejido.jpg` como fondo decorativo, superpuesto a un degradado

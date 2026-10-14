@@ -1,6 +1,7 @@
 package com.minkaart2.app.ui.admin
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -109,13 +111,11 @@ fun AdminRuacListScreen(navController: NavController) {
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
 
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)
-                .padding(16.dp, 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 12.dp)
         ) {
 
             LogoMinkaEncabezado(
@@ -124,21 +124,56 @@ fun AdminRuacListScreen(navController: NavController) {
                 colorEslogan = Borgona
             )
 
-            // Herramienta aparte para el documento de grado (ver README, "Evaluación") —
-            // no genera ni toca huellas visuales, el administrador no participa en el
-            // reconocimiento en sí: eso ya es automático al publicar/editar y con el
-            // autocompletado silencioso del artesano (ver GeneradorHuellas).
-            Text(
-                text = "Evaluar búsqueda visual",
-                color = Borgona,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { navController.navigate(Routes.ADMIN_VISUAL_EVAL) }
-                )
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+
+                OutlinedButton(
+                    onClick = {
+
+                        viewModel.cerrarSesion()
+
+                        navController.navigate(Routes.WELCOME) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    modifier = Modifier
+                        .height(36.dp)
+                        .padding(end = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Borgona),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "Cerrar sesión",
+                        color = Borgona,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // Herramienta aparte para el documento de grado (ver README, "Evaluación") —
+                // no genera ni toca huellas visuales, el administrador no participa en el
+                // reconocimiento en sí: eso ya es automático al publicar/editar y con el
+                // autocompletado silencioso del artesano (ver GeneradorHuellas).
+                OutlinedButton(
+                    onClick = { navController.navigate(Routes.ADMIN_VISUAL_EVAL) },
+                    modifier = Modifier.height(36.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Borgona),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "Evaluar búsqueda visual",
+                        color = Borgona,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
 
         Box(

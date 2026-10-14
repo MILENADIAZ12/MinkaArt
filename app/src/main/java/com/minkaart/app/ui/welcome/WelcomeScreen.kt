@@ -28,7 +28,7 @@ import androidx.navigation.NavHostController
 import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.GradientButton
-import com.minkaart2.app.ui.components.LogoMinka
+import com.minkaart2.app.ui.components.LogoSinFondo
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.SelectorIdioma
 
@@ -76,12 +76,13 @@ fun WelcomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            LogoMinka(
-                tamaño = 120.dp,
-                mostrarEslogan = false
+            LogoSinFondo(
+                color = Marfil,
+                ancho = 160.dp,
+                alto = 110.dp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = stringResource(R.string.eslogan),

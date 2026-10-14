@@ -16,6 +16,10 @@ class AdminRuacListViewModel : ViewModel() {
     private val _cargando = mutableStateOf(true)
     val cargando: State<Boolean> = _cargando
 
+    fun cerrarSesion() {
+        authRepository.cerrarSesion()
+    }
+
     fun cargarSolicitudes(onError: (String) -> Unit) {
 
         _cargando.value = true
