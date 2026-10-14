@@ -21,13 +21,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.ui.components.LogoMinka
 import com.minkaart2.app.ui.components.OutlineButton
+import com.minkaart2.app.ui.components.SelectorIdioma
 
 private val Guinda = Color(0xFF3B0F1A)
 private val Marfil = Color(0xFFF2EDE6)
@@ -57,6 +60,13 @@ fun WelcomeScreen(
                 )
         )
 
+        SelectorIdioma(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(16.dp)
+        )
+
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -66,17 +76,15 @@ fun WelcomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            Text(
-                text = "Minka Art",
-                color = Marfil,
-                style = MaterialTheme.typography.displaySmall,
-                textAlign = TextAlign.Center
+            LogoMinka(
+                tamaño = 120.dp,
+                mostrarEslogan = false
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Artesanía colombiana con identidad, historia y contacto directo.",
+                text = stringResource(R.string.eslogan),
                 color = Marfil.copy(alpha = 0.85f),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
@@ -85,7 +93,7 @@ fun WelcomeScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             GradientButton(
-                text = "Registrarse",
+                text = stringResource(R.string.registrarse),
                 onClick = {
                     navController.navigate(Routes.roleSelectionRoute())
                 },
@@ -95,7 +103,7 @@ fun WelcomeScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlineButton(
-                text = "Iniciar sesión",
+                text = stringResource(R.string.iniciar_sesion),
                 onClick = {
                     navController.navigate(Routes.LOGIN)
                 },

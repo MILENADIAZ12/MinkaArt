@@ -9,12 +9,19 @@ el proceso de elaboración de cada pieza, no solo el producto.
 MinkaArt tiene dos tipos de usuario, definidos por el campo `rol` (`"cliente"` o
 `"artesano"`) en el documento de usuario de Firestore:
 
-- **Artesano**: se registra con datos adicionales (teléfono, fecha de nacimiento, región,
-  qué productos vende, categorías artesanales) y puede publicar artesanías con foto,
+- **Artesano**: se registra con datos adicionales (teléfono, fecha de nacimiento,
+  departamentos donde trabaja —selección múltiple—, qué productos vende, categorías
+  artesanales —selección múltiple—) y puede publicar artesanías con foto,
   precio, descripción, historia/proceso de elaboración y región de origen.
 - **Cliente**: se registra con los datos básicos y consume el catálogo de todos los
   artesanos, con búsqueda, filtro por categoría, "me gusta" y detalle de producto con
   contacto por WhatsApp (ver [Flujos principales](#flujos-principales)).
+
+Todo registro (cliente, artesano, administrador y Google) exige aceptar los **Términos y
+Condiciones y la Política de Tratamiento de Datos Personales** (Ley 1581 de 2012, Decreto
+1377 de 2013 y Ley 1480 de 2011) — ver "Términos y condiciones" en [Flujos
+principales](#flujos-principales). La app está en **español (por defecto) e inglés**,
+elegible en Configuración de la cuenta.
 
 El registro de artesano incluye un campo opcional de **RUAC** (Registro Único de
 Artesanos y Artesanas de Colombia, la acreditación oficial de Artesanías de Colombia): si
@@ -35,8 +42,9 @@ verifica de ninguna forma.
 | Backend | Firebase (BOM) — Auth, Firestore, Storage | 33.10.0 |
 | Backend | Firebase Cloud Functions (`firebase-functions-ktx`, BoM) | 33.10.0 |
 | Notificaciones push | Firebase Cloud Messaging (`firebase-messaging`, BoM) | 33.10.0 |
-| Envío de correo | nodemailer (SMTP de Gmail, en Cloud Functions) | 6.9.15 |
+| Envío de correo | nodemailer (SMTP de Gmail, cuenta `minka.art.app@gmail.com`; secretos `GMAIL_USER`/`GMAIL_APP_PASSWORD`) en Cloud Functions; Resend (`RESEND_API_KEY`) queda como alternativa con `PROVEEDOR_CORREO` en `functions/src/index.ts` | 6.9.15 |
 | Carga de imágenes | Coil (`coil-compose`) | 2.7.0 |
+| Idioma por app (español / inglés) | `androidx.appcompat:appcompat` — solo para `AppCompatDelegate.setApplicationLocales` y `AppLocalesMetadataHolderService`; `MainActivity` extiende `AppCompatActivity` y el tema `Theme.MinkaArt_bta` pasó a heredar de `Theme.AppCompat.Light.NoActionBar` (AppCompat lo exige). La UI sigue siendo Compose | 1.7.0 |
 | Reconocimiento visual — preprocesamiento en el dispositivo | OpenCV (`org.opencv:opencv`, Maven Central, sin ML Kit) — CLAHE para poca luz, detección de foto borrosa/muy oscura (varianza del Laplaciano / brillo medio), recorte manual antes de enviar la foto (`vision/PreprocesadorImagen.kt`) | 4.10.0 |
 | Reconocimiento visual — embeddings de imagen (búsqueda real) | Google Cloud Vertex AI, modelo `multimodalembedding@001` (1408 dimensiones, ya normalizado a norma 1 — verificado con una llamada real), región `us-central1`, llamado desde Cloud Functions (nunca desde el dispositivo) | — |
 | Reconocimiento visual — comparación (búsqueda real) | Firestore vector search (`Query.findNearest`, `DOT_PRODUCT`) sobre la colección `embeddingsVisuales`, con índice vectorial dedicado | — |
@@ -74,8 +82,7 @@ detalle exacto de lo que hay que habilitar/configurar.
 
 Además del proyecto Android, el repositorio incluye `functions/`: un backend de Cloud
 Functions en Node.js + TypeScript (`onCall`/`onDocumentWritten`, v2) que genera y valida
-el código de verificación de correo y lo envía por el SMTP de Gmail con
-[nodemailer](https://nodemailer.com), y que además calcula los embeddings de la búsqueda
+el código de verificación de correo y lo envía por [Resend](https://resend.com) (y también el enlace de cambio de contraseña), y que además calcula los embeddings de la búsqueda
 visual con Vertex AI (`google-auth-library`) y los compara con Firestore vector search
 (`@google-cloud/firestore`, empaquetado dentro de `firebase-admin`). Ver
 [Modelo de datos](#modelo-de-datos) y [Flujos principales](#flujos-principales).
@@ -89,20 +96,20 @@ no corrutinas ni `Flow` — es la convención del proyecto, ver `CLAUDE.md`.
 ```
 MainActivity → MinkaArt_btaTheme → AppNavigation (NavHost)
     Screen (Compose)  →  ViewModel  →  Repository  →  Firebase (Auth / Firestore / Storage)
-                                                    →  Cloud Functions → Firestore / Gmail SMTP
+                                                    →  Cloud Functions → Firestore / Resend
                                                                        → Vertex AI (búsqueda visual)
 ```
 
 | Capa | Paquete | Responsabilidad |
 |---|---|---|
-| Entrada | `com.minkaart2.app` (`MainActivity.kt`) | Activity única, `enableEdgeToEdge()`, monta el tema y `AppNavigation`. |
+| Entrada | `com.minkaart2.app` (`MainActivity.kt`) | Activity única (`AppCompatActivity`, necesaria para los idiomas por app), `enableEdgeToEdge()`, monta el tema y `AppNavigation`. |
 | Navegación | `com.minkaart2.app.navigation` | `Routes` (constantes de ruta) y `AppNavigation` (`NavHost`). |
 | UI | `com.minkaart2.app.ui.*` | Un paquete por pantalla (Composables), sin lógica de negocio. |
 | Estado | `com.minkaart2.app.viewModel` / `viewmodel` | Validación de formularios y estado observable (`State<T>`). |
 | Datos | `com.minkaart2.app.repository` | Llamadas directas a Firebase Auth/Firestore/Storage, y a las Cloud Functions de verificación de correo (`AuthRepository.enviarCodigoVerificacion` / `verificarCodigo`). |
 | Modelo | `com.minkaart2.app.data.model` | `data class` que se serializan/deserializan con Firestore. |
 | Tema | `com.minkaart2.app.ui.theme` | Paleta de marca, tipografía, `MaterialTheme`. |
-| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con `nodemailer` sobre el SMTP de Gmail. Cuatro triggers de Firestore (`notificarNuevaVenta`, `notificarNuevaValoracion`, `notificarLikeNuevo`, `notificarCambioRuac`) escriben en `notificaciones` y envían el push de FCM. Para la búsqueda visual: `sincronizarEmbeddingVisual` (trigger en `productos/{productId}`) calcula el embedding con Vertex AI y lo guarda en `embeddingsVisuales`, y `buscarPorImagen` (callable) hace la búsqueda real con Firestore `findNearest` — ver Modelo de datos y "Búsqueda visual". |
+| Backend | `functions/src/index.ts` | Cloud Functions `onCall` (Node.js + TypeScript): generan, guardan y validan el código de verificación, y lo envían por correo con la API de Resend; `enviarEnlaceCambioContrasena` envía en español el enlace para cambiar la contraseña (lo genera Firebase Auth con el Admin SDK; 1 envío/minuto por correo, control en `limitesRecuperacion/{correo}`). Cuatro triggers de Firestore (`notificarNuevaVenta`, `notificarNuevaValoracion`, `notificarLikeNuevo`, `notificarCambioRuac`) escriben en `notificaciones` y envían el push de FCM. Para la búsqueda visual: `sincronizarEmbeddingVisual` (trigger en `productos/{productId}`) calcula el embedding con Vertex AI y lo guarda en `embeddingsVisuales`, y `buscarPorImagen` (callable) hace la búsqueda real con Firestore `findNearest` — ver Modelo de datos y "Búsqueda visual". |
 
 ## Estructura del proyecto
 
@@ -118,8 +125,12 @@ app/src/main/
 └── java/com/minkaart/app/
 ├── MainActivity.kt              # MotorHuellaVisual.inicializar(applicationContext) aquí
 ├── data/
-│   ├── CatalogosProducto.kt # departamentos, categorías, materias primas y clasificaciones
-│   │                         # de Publicar/Editar producto (listas fijas, compartidas)
+│   ├── CatalogosProducto.kt # departamentos, categorías, materias primas, clasificaciones,
+│   │                         # colores y tamaños (listas fijas, compartidas por Publicar/
+│   │                         # Editar producto, el registro de artesano y los filtros) +
+│   │                         # mapas valor-en-español → @StringRes para mostrarlos
+│   │                         # traducidos (lo guardado en Firestore nunca se traduce)
+│   ├── Terminos.kt          # VERSION_TERMINOS ("1.0"): versión del texto de TermsScreen
 │   ├── EscalaValoracion.kt  # niveles de calidad/confianza <-> puntos <-> etiqueta (Fase 6)
 │   └── model/
 │       ├── ArtesanoStats.kt # documento de "artesanoStats" — confianza del artesano
@@ -169,6 +180,8 @@ app/src/main/
 │   │                             # Resultados/SinResultados/Error — llama al callable
 │   │                             # "buscarPorImagen" (Vertex AI), ya no compara nada local
 │   ├── RegisterViewModel.kt
+│   ├── SesionViewModel.kt # destinoInicial(): Home del rol si hay sesión guardada, o Bienvenida;
+│   │                        # recuperarRol() para sesiones anteriores al almacén local
 │   └── VisualEvalViewModel.kt # evaluación de 3 métodos: Solo ORB / Híbrido (motor
 │                                 # anterior, local) vs. Nuevo — Vertex AI (real, separado
 │                                 # buena/poca luz) — solo administrador
@@ -182,7 +195,7 @@ app/src/main/
     │                                 # (anterior) vs. Nuevo — Vertex AI (buena/poca luz)
     ├── ruac/                      # Solicitud e insignia de RUAC (Fase 5)
     │   ├── RequestRuacScreen.kt   # el artesano solicita/re-solicita su RUAC
-    │   └── RuacBadgeScreen.kt     # insignia real (reemplaza el placeholder de RUAC_BADGE)
+    │   └── RuacBadgeScreen.kt     # insignia real, 3 bloques (encabezado con patrón, datos del registro, "¿por qué es importante?")
     ├── sales/                     # Ventas, valoraciones, calidad/confianza (Fase 6)
     │   ├── RegisterSaleScreen.kt  # el artesano registra una venta a un cliente
     │   ├── RateSaleScreen.kt      # el cliente valora una compra (solo pills, sin texto)
@@ -203,22 +216,34 @@ app/src/main/
     │   ├── ImageUploadBox.kt      # selector de varias imágenes con miniaturas + eliminar
     │   │                         # (Publicar/Editar), hasta ProductViewModel.MAX_IMAGENES
     │   ├── MinkaFormField.kt      # campo con etiqueta + caja (fondo claro, artesano)
-    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (ACCOUNT_SETTINGS)
+    │   ├── PlaceholderScreen.kt   # relleno para rutas de fases futuras (hoy ninguna ruta lo
+    │   │                         # usa: ACCOUNT_SETTINGS ya es una pantalla real)
+    │   ├── MinkaMultiSelectField.kt # selección múltiple de una lista fija (diálogo con
+    │   │                         # casillas + chips con lo elegido): departamentos y categorías
+    │   │                         # del registro de artesano
+    │   ├── CheckboxTerminos.kt    # casilla obligatoria "Acepto los Términos y Condiciones…" con
+    │   │                         # enlace a TermsScreen (registros)
+    │   ├── SelectorIdioma.kt      # pills "ES | EN" (WelcomeScreen)
     │   ├── BarraValoracion.kt     # barra con degradado de marca (calidad/confianza), reemplaza a ConfianzaDots
     │   ├── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
     │   ├── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
-    │   ├── IconoNotificaciones.kt # campana con badge de no leídas, compartida por los dos Home
+    │   ├── LogoMinka.kt           # LogoCircular (logo1 recortado en círculo), LogoMinka (+ eslogan;
+    │   │                         # Bienvenida) y LogoMinkaEncabezado (logo + eslogan, título opcional; Home cliente/artesano
+    │   │                         # y panel del administrador)
+    │   ├── IconoNotificaciones.kt # IconoAccion (círculo vinotinto + pictograma blanco + punto/píldora de novedad azul claro) y la campana que lo usa; compartido por los dos Home
     │   ├── MinkaDropdownField.kt  # selector de una lista fija (Departamento/Categoría/Clasificación)
     │   └── EfectoNotificaciones.kt # pide permiso de notificaciones + guarda el token FCM
     ├── home/
     │   ├── HomeArtesanoScreen.kt  # encabezado con campana + avatar de perfil
-    │   └── HomeClienteScreen.kt   # encabezado con campana, búsqueda, chips, feed, bottom nav
+    │   ├── HomeClienteScreen.kt   # encabezado con campana, búsqueda, chips de categoría sincronizados con un HorizontalPager (deslizar cambia de categoría), feed, bottom nav
+    │   └── PanelFiltros.kt        # bottom sheet de filtros (material, ubicación, color, tamaño; selección múltiple) + FiltrosCatalogo
     ├── login/LoginScreen.kt
     ├── notifications/NotificationsScreen.kt # centro de notificaciones, abierto desde la campana
     ├── product/ProductDetailScreen.kt  # detalle, artesano, calidad/confianza, contacto WhatsApp
     ├── profile/
     │   ├── ArtisanProfileScreen.kt  # perfil público del artesano, editable por su dueño
     │   ├── ClientProfileScreen.kt   # menú del cliente: info básica, likes, cerrar sesión
+    │   ├── EditProfileScreen.kt     # "Editar información básica" (cliente y artesano): foto, nombre, teléfono, ciudad/región
     │   ├── LikesScreen.kt           # lista de productos con like del usuario actual
     │   └── ProfileScreen.kt         # placeholder genérico, sin usar desde esta fase
     ├── publication/
@@ -229,6 +254,9 @@ app/src/main/
     │                                       # recorte ajustable estilo Google Lens)
     ├── register/RegisterScreen.kt
     ├── roleselection/RoleSelectionScreen.kt # "¿Cómo quieres usar MinkaArt?": Soy artesano / Soy cliente
+    │                                         # (tarjetas blancas con ícono y texto vinotinto)
+    ├── settings/AccountSettingsScreen.kt    # Configuración. Cliente: solo nombre y correo, idioma y ayuda y soporte. Artesano: además foto, teléfono, ciudad, seguridad, notificaciones, cerrar sesión, "Mi insignia RUAC" y "Mi taller"
+    ├── terms/TermsScreen.kt                 # Términos y Condiciones + Política de Datos (es/en)
     ├── welcome/WelcomeScreen.kt
     └── theme/
         ├── Color.kt
@@ -238,9 +266,21 @@ app/src/main/
 │   └── MinkaMessagingService.kt   # FirebaseMessagingService: recibe el push, construye
 │                                   # la notificación, guarda el token si rota
 └── util/
-    └── Texto.kt                    # normalizar(): quita tildes/mayúsculas para
-                                     # búsqueda de texto; compartida por HomeClienteScreen
-                                     # y MyProductsScreen (Ajustes 2)
+    ├── Texto.kt                    # normalizar(): quita tildes/mayúsculas para
+    │                                # búsqueda de texto; compartida por HomeClienteScreen
+    │                                # y MyProductsScreen (Ajustes 2)
+    ├── Etiquetas.kt                # etiquetaCategoria/Color/Tamano/MateriaPrima/Clasificacion():
+    │                                # texto traducido de un valor guardado en Firestore
+    ├── Idioma.kt                   # Idioma.actual()/cambiar("es"|"en") sobre AppCompatDelegate
+    └── SesionLocal.kt              # SharedPreferences "sesion_minka": rol + "Recuérdame" para la
+                                     # sesión persistente (ver "Sesión persistente")
+
+app/src/main/res/
+├── values/strings.xml              # textos en español (idioma por defecto)
+├── values-en/strings.xml           # textos en inglés — toda clave nueva va en los DOS
+├── xml/locales_config.xml          # idiomas ofrecidos (es, en) en Ajustes del sistema
+└── drawable/logo1.png (logo oficial MINKA ART), ic_artesano.xml, ic_cliente.xml, ic_filtros.xml  # vectores propios; img_rol_artesano.jpg / img_rol_cliente.jpg: fotos de las tarjetas de RoleSelectionScreen (no hay
+                                    # material-icons-extended)
 ```
 
 Aparte, `app/src/debug/assets/evaluacion/` (solo se empaqueta en el APK de debug) guarda las
@@ -287,12 +327,13 @@ de `AppNavigation.kt`:
 
 | Constante | Valor | Pantalla | ¿Registrada en el `NavHost`? | ¿Alguien navega hacia ella? |
 |---|---|---|---|---|
-| `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial) | — |
+| `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial si no hay sesión guardada; con sesión guardada la app arranca directo en el Home del rol — ver "Sesión persistente") | — |
 | `LOGIN` | `login` | `LoginScreen` | Sí | `WelcomeScreen`, `LoginScreen` (recuperar contraseña) |
 | `ROLE_SELECTION` | `role_selection?google={google}` | `RoleSelectionScreen` | Sí, con argumento opcional `google` (Bool, por defecto `false`) | `WelcomeScreen` ("Registrarse"), `LoginScreen` ("Regístrate" y usuario nuevo de Google, con `google=true`) |
 | `REGISTER` | `register/{rol}?google={google}` | `RegisterScreen` | Sí, con argumento `rol` (`cliente`/`artesano`; otro valor no renderiza nada) y `google` opcional | `RoleSelectionScreen` (`Routes.registerRoute(rol, google)`) |
-| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`), toggle "Cliente" del encabezado de `HomeArtesanoScreen` (cambio de modo) |
-| `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`), toggle "Artesano" del encabezado de `HomeClienteScreen` y fila "Cambiar a modo artesano" de `ClientProfileScreen` (ambos solo si el usuario es artesano — vuelven al modo artesano) |
+| `TERMS` | `terms` | `TermsScreen` (Términos y Condiciones + Política de Tratamiento de Datos) | Sí | Enlace "Términos y Condiciones" de `CheckboxTerminos` en `RegisterScreen`, `AdminRegisterScreen` y `RoleSelectionScreen` (solo en modo Google) |
+| `HOME_CLIENTE` | `home_cliente` | `HomeClienteScreen` (catálogo real) | Sí | `LoginScreen` (rol `cliente`), arranque con sesión guardada (`AppNavigation`), toggle "Cliente" del encabezado de `HomeArtesanoScreen` (cambio de modo) |
+| `HOME_ARTESANO` | `home_artesano` | `HomeArtesanoScreen` | Sí | `LoginScreen` (rol `artesano`), arranque con sesión guardada (`AppNavigation`), toggle "Artesano" del encabezado de `HomeClienteScreen` y fila "Cambiar a modo artesano" de `ClientProfileScreen` (ambos solo si el usuario es artesano — vuelven al modo artesano) |
 | `MY_PRODUCTS` | `my_products` | `MyProductsScreen` (Panel de Publicaciones) | Sí | `HomeArtesanoScreen` |
 | `PUBLICATION` | `publication` | `PublicationScreen` | Sí | `HomeArtesanoScreen`, `MyProductsScreen` (chip "Nueva") |
 | `EDIT_PRODUCT` | `edit_product/{productId}` | `EditProductScreen` | Sí, con argumento de ruta | `MyProductsScreen` (menú ⋮ → Editar) |
@@ -301,12 +342,13 @@ de `AppNavigation.kt`:
 | `CLIENT_PROFILE` | `client_profile` | `ClientProfileScreen` | Sí | `HomeClienteScreen` (bottom nav "Perfil") — también la ve un artesano "viendo como cliente" (rol real, no la ruta), con contenido algo distinto (ver Flujos principales) |
 | `LIKES` | `likes` | `LikesScreen` | Sí | `HomeClienteScreen` (bottom nav "Likes"), `ClientProfileScreen` ("Mis likes") |
 | `PURCHASE_HISTORY` | `purchase_history` | `PurchaseHistoryScreen` (real desde Fase 6) | Sí | `ClientProfileScreen` ("Historial de compras") |
-| `ACCOUNT_SETTINGS` | `account_settings` | `PlaceholderScreen` | Sí | `ClientProfileScreen` ("Configuración de la cuenta") |
+| `ACCOUNT_SETTINGS` | `account_settings` | `AccountSettingsScreen` (real; antes `PlaceholderScreen`) — selector de idioma Español / English | Sí | `ClientProfileScreen` ("Configuración de la cuenta"), `ArtisanProfileScreen` (ícono de engranaje en la cabecera, solo cuando lo ve su dueño) |
+| `EDIT_PROFILE` | `edit_profile` | `EditProfileScreen` (nombre, teléfono, ciudad/región, foto; el correo es solo lectura) | Sí | `ClientProfileScreen` ("Información básica"), `AccountSettingsScreen` (filas de "Información básica") |
 | `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
 | `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
 | `RECOGNITION` | `recognition` | `RecognitionScreen` (búsqueda visual real, ya no placeholder) | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
 | `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RegisterScreen` (enlace "¿Eres administrador?") |
-| `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`; también al entrar con Google siendo administrador) |
+| `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`; también al entrar con Google siendo administrador), arranque con sesión guardada (`AppNavigation`) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
 | `ADMIN_VISUAL_EVAL` | `admin_visual_eval` | `AdminVisualEvalScreen` | Sí | `AdminRuacListScreen` (enlace "Evaluar búsqueda visual" en el encabezado) |
@@ -327,12 +369,18 @@ el `uid` de Firebase Auth.
 | `uid` | `String` | |
 | `nombre` | `String` | |
 | `correo` | `String` | |
-| `rol` | `String` | `"cliente"`, `"artesano"` o `"administrador"` (Fase 5; se compara en minúsculas al hacer login) |
+| `region` | `String` | Ciudad/región en texto libre. Heredado de antes de `departamentos` (ver "Nota de migración `region` → `departamentos`" abajo), pero **`EditProfileScreen` vuelve a escribirlo** (campo "Ciudad / región" de Editar información básica, cliente y artesano); no sustituye a `departamentos` |
 | `telefono` | `String` | Solo artesano |
 | `fechaNacimiento` | `String` | Solo artesano, formato `dd/MM/yyyy` |
-| `region` | `String` | Solo artesano |
+| `region` | `String` | **Heredado, solo lectura** (ver "Nota de migración `region` → `departamentos`" abajo): ningún código nuevo lo vuelve a escribir, reemplazado por `departamentos` |
+| `departamentos` | `List<String>` | Solo artesano; selección múltiple (mínimo 1) de `CatalogosProducto.DEPARTAMENTOS`, los mismos 33 de Publicar/Editar producto |
 | `productosQueVende` | `String` | Solo artesano, texto libre |
-| `categoriasArtesanales` | `List<String>` | Solo artesano; se captura como texto separado por comas y se parte en el registro |
+| `categoriasArtesanales` | `List<String>` | Solo artesano; selección múltiple de las 16 opciones de `CatalogosProducto.CATEGORIAS` (mínimo 1). Los artesanos registrados antes de este ajuste tienen aquí el texto libre que escribieron (se partía por comas) y se leen igual: nada en la app lo reinterpreta |
+| `categoriasArtesanalesOtro` | `String?` | Solo cuando `categoriasArtesanales` incluye `"Otros"`: lo escrito en "Especifica cuál" (obligatorio en ese caso). `null` en cualquier otro caso — mismo patrón que `Product.categoriaOtro` |
+| `aceptoTerminos` | `Boolean` | `true` si se aceptaron los Términos y Condiciones al registrarse; `false` en usuarios anteriores a este ajuste |
+| `terminosAceptadosEn` | `Timestamp?` | Cuándo se aceptaron (reloj del dispositivo, `Timestamp.now()`); `null` en usuarios anteriores |
+| `versionTerminos` | `String` | Versión del texto aceptado (`VERSION_TERMINOS`, hoy `"1.0"`); `""` en usuarios anteriores |
+| `fotoUrl` | `String?` | URL de la foto de perfil (cliente o artesano) en Storage `usuarios/{uid}/foto_perfil`; `null` hasta que la sube — se muestra un ícono por defecto |
 | `ruacEstado` | `String` | Solo artesano. `"no_solicitado"` (default) \| `"pendiente"` \| `"verificado"` \| `"rechazado"` (Fase 5) |
 | `ruacRegistro` | `String?` | Número de registro RUAC declarado por el artesano |
 | `ruacRegion` | `String?` | Región declarada en la solicitud de RUAC (queda `null` si el RUAC vino del registro, ver más abajo) |
@@ -366,6 +414,17 @@ queda directo en `ruacEstado = "pendiente"` con `ruacRegistro`/`ruacDocumentoUrl
 (entra a la misma cola de revisión del administrador) pero `ruacRegion`/`ruacTecnica`
 quedan en `null`, porque el registro no los pide — solo `RequestRuacScreen` (solicitud
 posterior desde el perfil) los captura.
+
+**Nota de migración `region` → `departamentos`**: un artesano registrado antes de este
+ajuste solo tiene `region` (texto libre, p. ej. "Bogotá, Boyacá"); `departamentos` queda
+vacío (`emptyList()`). Hoy ninguna pantalla muestra ni lee `region`/`departamentos` de un
+artesano (solo el registro los escribe), así que no hay nada que se rompa ni nada que
+migrar para que la app funcione; **no hay ningún script de migración** que convierta el
+texto libre en departamentos. Si más adelante una pantalla muestra los departamentos del
+artesano, debe caer a `region` cuando `departamentos` esté vacío (mismo criterio que
+`Product.regionOrigen`). Igual con `categoriasArtesanales` (texto libre en los artesanos
+antiguos) y con los campos de términos (los usuarios anteriores quedan con
+`aceptoTerminos == false`; la app no les pide aceptar el texto después).
 
 **RUAC editable/eliminable (ajuste posterior a la Fase 5)**: `"verificado"` dejó de ser un
 estado final. El propio artesano puede "Editar RUAC" (reabre `RequestRuacScreen`
@@ -405,6 +464,8 @@ Firestore (`document()` sin argumentos).
 | `departamento` | `String` | Uno de los 33 departamentos de Colombia (`CatalogosProducto.DEPARTAMENTOS`), elegido con un dropdown en Publicar/Editar |
 | `municipio` | `String` | Texto libre — no hay una lista completa de los ~1100 municipios de Colombia dentro de la app |
 | `clasificacion` | `String?` | Opcional. Uno de `CatalogosProducto.CLASIFICACIONES` ("Artesanía indígena" / "tradicional popular" / "contemporánea o neoartesanía") o `null` si no se especificó |
+| `color` | `String` | Opcional. Uno de `CatalogosProducto.COLORES` (Natural/crudo, Blanco, Negro, Café, Rojo, Naranja, Amarillo, Verde, Azul, Morado, Rosado, Gris, Multicolor) o `""` si no se especificó. Alimenta el filtro "Color" del bottom sheet de `HomeClienteScreen`. `""` también en productos publicados antes de este campo: no aparecen al filtrar por color, pero sí sin filtro |
+| `tamano` | `String` | Opcional. Uno de `CatalogosProducto.TAMANOS` (Pequeño (menos de 15 cm) / Mediano (15–40 cm) / Grande (más de 40 cm)) o `""`. Mismo comportamiento que `color` con el filtro "Tamaño" |
 | `imagenes` | `List<String>` | URLs de Storage, hasta `ProductViewModel.MAX_IMAGENES` (15). `ProductDetailScreen` las muestra en un carrusel (`HorizontalPager`); tocar la imagen abre un visor de pantalla completa con zoom (pinch) y paneo |
 | `vistas` | `Long` | Por defecto `0`. Sube en 1 cada vez que `ProductDetailScreen` abre el producto (`ProductRepository.incrementarVista`, `FieldValue.increment(1)`), salvo que quien lo abra sea el propio artesano dueño (en cualquier modo). Cuenta por apertura, no por visitante único: abrir el mismo producto varias veces suma varias vistas |
 | `likes` | `Long` | Por defecto `0`. Se incrementa/decrementa con `ProductRepository.alternarLike`, en una transacción junto con `productos/{id}/likes/{uid}` (ver más abajo) |
@@ -648,6 +709,13 @@ que se agregó a `Product.kt`, lo que dejaba a cualquier no-dueño cambiarlo sin
 ninguna rama lo notara. `materiaPrimaOtro` entró al mismo tiempo que `materiaPrima` se
 convirtió en dropdown, por la misma razón.
 
+**`color`/`tamano` en las reglas de `productos`**: entraron a `productoBaseIgual` (archivo
+`y`) con `.get('color', '')` / `.get('tamano', '')`, por la misma razón documentada arriba
+(un producto anterior a estos campos no los tiene escritos en Firestore, y acceder con `.`
+a un campo ausente daría `PERMISSION_DENIED`). **Hay que desplegar las reglas de Firestore**
+(`firebase deploy --only firestore:rules`) para que un cliente pueda dar like/valorar/sumar
+vista a un producto que ya tenga `color`/`tamano` sin que la regla los vea como "cambiados".
+
 **Reglas de `huellasVisuales`** (ver el modelo de datos más abajo): lectura para
 cualquier autenticado; `create`/`update`/`delete` para el artesano dueño
 (`artesanoId == request.auth.uid` **y** que ese mismo uid sea el dueño real de
@@ -714,6 +782,7 @@ pueda reutilizarse.
 | `productos/{artesanoId}/{productoId}/imagen_{índice}` | Fotos de una artesanía (`imagen_0`, `imagen_1`, …, hasta 15), subidas al publicar. Al editar, las imágenes nuevas se suben con el prefijo `imagen_{marcaDeTiempo}_{índice}` para no chocar con los índices ya ocupados por las que se conservan — el orden final en `Product.imagenes` es el que importa, no el nombre del archivo en Storage |
 | `productos/{artesanoId}/{productoId}/imagen_principal` | **Heredado**: nombre de archivo usado antes de agregar soporte de varias imágenes (una sola foto por producto). Los productos publicados antes de este ajuste conservan su imagen en esa ruta; su URL sigue guardada tal cual en `Product.imagenes`, nadie reconstruye la ruta a partir del nombre |
 | `ruac/{uid}/documento_ruac` | Documento RUAC adjuntado en el registro |
+| `usuarios/{uid}/foto_perfil` | Foto de perfil (cliente o artesano), un solo archivo — cada subida nueva reemplaza la anterior; su URL queda en `usuarios/{uid}.fotoUrl`. Reglas en `storage.rules`: cualquier autenticado puede leerla, solo el propio `uid` puede escribirla. (`storage.rules` está en la raíz y `firebase.json` ya lo referencia, pero hay que desplegarlo: `firebase deploy --only storage`) |
 
 ## Flujos principales
 
@@ -725,8 +794,13 @@ pueda reutilizarse.
   caracteres) y **"Confirmar contraseña"** (si no coinciden: "Las contraseñas no
   coinciden", sin enviar el código; `AdminRegisterScreen` valida lo mismo) para cualquier
   rol; todos los campos de contraseña tienen un ojo para mostrarla/ocultarla; si el rol es `artesano`, exige
-  además teléfono, fecha de nacimiento, región, productos que vende y al menos una
-  categoría. Si `tieneRuac == true`, exige número y documento. El registro se completa
+  además teléfono, fecha de nacimiento, **al menos un departamento** (selección múltiple,
+  `MinkaMultiSelectField`), productos que vende (texto libre) y **al menos una categoría**
+  (selección múltiple de las 16 de `CatalogosProducto.CATEGORIAS`; si incluye "Otros"
+  aparece "Especifica cuál", obligatorio, que se guarda en `categoriasArtesanalesOtro`).
+  Si `tieneRuac == true`, exige número y documento. Debajo del campo de contraseña
+  aparece la leyenda "🔒 Tu contraseña se guarda cifrada" (cierta: la contraseña solo la
+  guarda Firebase Authentication con hash; ver más abajo). El registro se completa
   en dos pasos, con verificación de correo por código de 6 dígitos generado por Cloud
   Functions (no por el mecanismo nativo de Firebase Auth): **la cuenta de Firebase Auth
   se crea solo después de verificar el código**, así nunca queda una cuenta huérfana en
@@ -734,7 +808,7 @@ pueda reutilizarse.
   1. **`RegisterViewModel.iniciarRegistro`**: tras las validaciones locales, llama a
      `AuthRepository.enviarCodigoVerificacion` (Cloud Function `enviarCodigoVerificacion`),
      que genera un código de 6 dígitos, lo guarda en `codigosVerificacion/{correo}` con
-     expiración de 10 minutos y lo envía por correo con nodemailer vía el SMTP de Gmail.
+     expiración de 10 minutos y lo envía por correo con la API de Resend.
      Los datos del formulario
      (incluida la contraseña y el `Uri` del RUAC) quedan en memoria del ViewModel
      (`datosPendientes`) — **ninguna cuenta de Firebase Auth existe todavía** y el
@@ -750,6 +824,36 @@ pueda reutilizarse.
      correctamente". Si el código es incorrecto, expiró o se agotaron los intentos, se
      muestra el mensaje de error correspondiente y **los datos del formulario no se
      pierden**: el usuario puede reintentar o reenviar el código sin volver a llenarlo.
+
+  **Términos y condiciones** (Ley 1581 de 2012 / Decreto 1377 de 2013 / Ley 1480 de 2011):
+  todos los registros llevan la casilla obligatoria `CheckboxTerminos` ("Acepto los
+  Términos y Condiciones y la Política de Tratamiento de Datos Personales *"; el enlace
+  abre `TermsScreen`, `Routes.TERMS`). Sin marcarla no se envía el código de verificación
+  ni se crea ninguna cuenta: la validación vive en los ViewModels
+  (`RegisterViewModel.iniciarRegistro`/`completarRegistroGoogle`,
+  `AdminRegisterViewModel.registrar`, `GoogleSignInViewModel.crearClienteConGoogle`) y
+  muestra "Debes aceptar los términos y condiciones para continuar". Al crear el
+  documento de `usuarios` se guardan `aceptoTerminos = true`, `terminosAceptadosEn` y
+  `versionTerminos` (`VERSION_TERMINOS`) en todos los flujos: correo, administrador,
+  cliente con Google y artesano con Google. En el flujo de Google la casilla aparece en
+  `RoleSelectionScreen` (antes de "Soy cliente", que crea el documento ahí mismo) y en
+  `RegisterScreen` (artesano); si alguien entra con Google desde `RegisterScreen` como
+  cliente nuevo sin marcarla, se le avisa y se cierra la sesión de Auth que quedó sin
+  documento. `TermsScreen` (texto en `strings.xml`, es/en) cubre: datos que se recogen,
+  finalidad, derechos del titular (conocer, actualizar, rectificar, suprimir, revocar),
+  canal de contacto y responsable (**placeholders `[correo de contacto]` y `[nombre del
+  responsable]` por completar**), el alcance de MinkaArt frente a la Ley 1480 (conecta
+  artesanos y compradores, la venta se acuerda por WhatsApp, cada artesano responde por
+  información, calidad y precio) y la seguridad de la contraseña.
+  **Verificado en el código**: la contraseña nunca se escribe en Firestore — `User` no
+  tiene ningún campo de contraseña, `RegisterViewModel` solo la mantiene en memoria
+  (`datosPendientes`) hasta llamar a `createUserWithEmailAndPassword`, y las Cloud
+  Functions solo manejan el código de verificación (el "password" de
+  `functions/src/index.ts` es la API key de Resend, no la de los usuarios).
+  Como detalle de implementación, los errores de validación de esos ViewModels llegan a
+  la pantalla por `onErrorRes: (Int) -> Unit` (id de recurso, para mostrarlos en el idioma
+  de la app sin guardar un `Context` en el ViewModel); los errores de Firebase siguen
+  llegando como texto por `onError`.
 
   **Registro con Google** (botón "Continuar con Google" en `RegisterScreen` y
   `LoginScreen`): `GoogleSignInViewModel` → `AuthRepository.obtenerTokenGoogle` (Credential
@@ -792,7 +896,10 @@ pueda reutilizarse.
   `MinkaDropdownField`/`MinkaFormField`), la Categoría es un dropdown de 16 opciones
   curadas (`CatalogosProducto.CATEGORIAS`) — si se elige "Otros", aparece un campo
   obligatorio "Especifica cuál" que se guarda en `categoriaOtro` — y la Clasificación es
-  un dropdown opcional de 3 valores (o "Sin especificar" → `null`). `EditProductScreen`
+  un dropdown opcional de 3 valores (o "Sin especificar" → `null`). También hay dos
+  dropdowns opcionales, **Color** (`CatalogosProducto.COLORES`) y **Tamaño**
+  (`CatalogosProducto.TAMANOS`), con "Sin especificar" → `""`; alimentan los filtros del
+  catálogo del cliente. `EditProductScreen`
   usa el mismo formulario y componentes; ver las notas de migración de `regionOrigen` y
   de `materiaPrima` en el modelo de `productos` para cómo se comportan con productos
   publicados antes de cada ajuste.
@@ -880,11 +987,22 @@ pueda reutilizarse.
     manda a `HOME_ARTESANO`) — el modo no se persiste entre sesiones.
 - **Catálogo del cliente** (`HomeClienteScreen` → `HomeClienteViewModel`): barra de
   búsqueda real (el ícono de cámara navega a `Routes.RECOGNITION`, la búsqueda visual
-  real — ver "Búsqueda visual" más abajo), chips de
-  categoría y, debajo, chips de materia prima — ambos armados dinámicamente a partir de
-  los valores distintos de `categoria`/`materiaPrima` presentes en los productos
-  cargados, no de una lista fija; los tres filtros (categoría, materia prima, texto) se
-  combinan con AND. El feed (`obtenerTodosLosProductosActivos`)
+  real — ver "Búsqueda visual" más abajo), una fila de chips de categoría en un
+  `LazyRow` con scroll horizontal (armados dinámicamente a partir de los valores
+  distintos de `categoria` presentes en los productos cargados, no de una lista fija) y, a
+  la derecha de la barra de búsqueda, un **botón de filtros** (`ic_filtros`) con un badge
+  con la cantidad de filtros activos (material + color + tamaño; la categoría no cuenta,
+  tiene sus propios chips). Reemplaza a la antigua segunda fila de chips de materia
+  prima. El botón abre un `ModalBottomSheet` con tres secciones de selección única
+  (volver a tocar el elegido lo deselecciona): **Material** (`materiaPrima`), **Color**
+  (`color`) y **Tamaño** (`tamano`), todas derivadas de los valores reales presentes en
+  los productos cargados (si ningún producto tiene color o tamaño todavía, la sección
+  dice "Aún no hay artesanías con este dato"), y dos botones: "Aplicar" (los cambios del
+  sheet son un borrador hasta pulsarlo) y "Limpiar filtros". Texto, categoría, material,
+  color y tamaño se combinan con AND, en memoria, sin consultas nuevas; un producto
+  antiguo sin `color`/`tamano` no aparece al filtrar por ellos pero sí sin filtro.
+  Los valores se muestran traducidos (`util/Etiquetas.kt`) pero se comparan siempre por
+  el valor en español guardado en Firestore. El feed (`obtenerTodosLosProductosActivos`)
   trae los productos de **todos** los artesanos, a diferencia del Panel de Publicaciones,
   que solo trae los propios; el nombre del artesano de cada tarjeta se resuelve con
   `AuthRepository.obtenerUsuarioPorId`, cacheado por `artesanoId` en el ViewModel para no
@@ -897,8 +1015,8 @@ pueda reutilizarse.
   navega a ningún lado, solo hay una barra de búsqueda en esta misma pantalla.
 
   **El buscador filtra de verdad** (`titulo`/`descripcion` de cada producto), combinado
-  con **AND** junto al chip de categoría y al chip de materia prima activos — los tres
-  filtros se aplican en memoria
+  con **AND** junto a la categoría y a los filtros del bottom sheet (material, color,
+  tamaño) activos — todos se aplican en memoria
   sobre los productos ya cargados, sin ninguna consulta nueva a Firestore por cada tecla:
   Firestore no tiene búsqueda de texto completo nativa y el tamaño del catálogo no
   justifica un servicio externo (Algolia, extensiones, etc.). El texto escrito se
@@ -1078,7 +1196,9 @@ pueda reutilizarse.
   carrusel y agrega zoom (pinch, 1x–4x) y paneo sobre la imagen ampliada
   (`detectTransformGestures` + `graphicsLayer`, sin ninguna librería nueva). Muestra nombre, precio,
   categoría, descripción, historia y región del producto, y una fila con el artesano
-  (nombre, contacto, insignia RUAC en miniatura si `tieneRuac`) que navega a su
+  (**foto de perfil del artesano** con recorte circular vía Coil si `fotoUrl` no es
+  `null`, el ícono por defecto si no; nombre, contacto, insignia RUAC en miniatura si
+  `ruacEstado == "verificado"`) que navega a su
   `Routes.artisanProfileRoute(artesanoId)`. Dos `BarraValoracion` (calidad y confianza,
   con degradado de marca y conteo de verificaciones — reemplazan a `ConfianzaDots`,
   ver "Diseño y marca"). El botón "Contactar artesano" usa `contactoPublico` (con `telefono` como
@@ -1102,17 +1222,62 @@ pueda reutilizarse.
   (`AuthRepository.actualizarCamposUsuario`, un `update()` parcial genérico). Accesible
   desde el nombre del artesano en una tarjeta del feed, desde la fila del artesano en el
   Detalle, y (para el propio artesano) desde un ícono nuevo en el encabezado de
-  `HomeArtesanoScreen`.
+  `HomeArtesanoScreen`. **Foto de perfil**: cuando lo ve su dueño, el avatar lleva una
+  insignia de cámara que abre el selector de imágenes (`GetContent()`); la foto se sube
+  con `AuthRepository.subirFotoPerfil` a `usuarios/{uid}/foto_perfil` y su URL se guarda
+  en `usuarios/{uid}.fotoUrl` (ver Modelo de datos y Storage); sin foto se muestra el
+  ícono por defecto. También solo para el dueño, un ícono de engranaje en la cabecera
+  abre `Routes.ACCOUNT_SETTINGS` (idioma).
 - **Perfil del cliente y Likes** (`ClientProfileScreen`, `LikesScreen`): el perfil del
   cliente es un menú (información básica — solo `nombre`, editable en un diálogo; mis
-  likes; historial de compras y configuración de la cuenta como placeholders; cerrar
-  sesión) sin avatar real — no existe ningún campo de foto de perfil ni flujo de subida,
-  así que siempre se muestra un ícono por defecto. "Mis likes" lista los productos que el
+  likes; historial de compras; configuración de la cuenta —idioma—; cerrar sesión) con
+  el mismo avatar con foto de perfil y la misma insignia de cámara que el artesano
+  (`ClientProfileViewModel.actualizarFotoPerfil` reutiliza `AuthRepository.subirFotoPerfil`).
+  "Mis likes" lista los productos que el
   usuario marcó con like: primero `obtenerProductosLikeadosPorUsuario` (ids, vía
   `collectionGroup`), luego `obtenerProductosPorIds` (en bloques de 30 con
   `whereIn(FieldPath.documentId(), ...)`) para traerlos de una vez en vez de una lectura
-  por producto. "Cerrar sesión" llama a `AuthRepository.cerrarSesion()` y navega a
-  `Routes.WELCOME` limpiando todo el back stack (`popUpTo(0) { inclusive = true }`).
+  por producto. "Cerrar sesión" llama a `AuthRepository.cerrarSesion()` (que además
+  limpia `SesionLocal`) y navega a `Routes.WELCOME` limpiando todo el back stack
+  (`popUpTo(0) { inclusive = true }`).
+- **Sesión persistente**: Firebase Auth ya conserva la sesión en el dispositivo; lo que
+  faltaba era usarla al arrancar. `AppNavigation` obtiene su `startDestination` de
+  `SesionViewModel.destinoInicial()`: sin `currentUser` → `WELCOME`; con usuario pero
+  "Recuérdame" desmarcado → cierra la sesión y `WELCOME`; con rol guardado →
+  `Routes.homeDeRol(rol)` al instante (funciona sin internet). Con usuario sin rol guardado
+  (sesión anterior a este cambio) arranca en `WELCOME` y un `LaunchedEffect` llama a
+  `recuperarRol`: una consulta a `usuarios/{uid}` vía `consultarRolSiExiste` que guarda el
+  rol y pasa al Home (solo si la persona sigue en `WELCOME`), o —si no hay documento
+  (registro con Google a medias) o falla— cierra la sesión. El "almacén local" es `util/SesionLocal.kt`: `SharedPreferences`
+  `sesion_minka` con `rol` y `recordar` (sin Room ni DataStore, sin dependencias nuevas),
+  inicializado en `MainActivity`. Lo escriben `LoginScreen.irSegunRol` (con el valor de la
+  casilla "Recuérdame") y los registros que entran directo a un Home (`RegisterScreen`,
+  `RoleSelectionScreen` en modo Google, siempre con `recordar = true`). El registro de
+  administrador vuelve a Login, y el registro de cliente/artesano por correo no guarda
+  nada: en ambos casos el primer arranque usa la consulta de respaldo.
+- **Configuración de idioma (español / inglés)**: la app usa los "idiomas por app" de
+  Android con `AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"
+  | "es"))` (envuelto en `util/Idioma.kt`). Se cambia desde `AccountSettingsScreen`
+  (`Routes.ACCOUNT_SETTINGS`, "Idioma / Language": accesible desde `ClientProfileScreen`
+  → "Configuración de la cuenta" y, para el dueño, desde el engranaje de la cabecera de
+  `ArtisanProfileScreen`) o desde el selector "ES | EN" de `WelcomeScreen`, que se ve antes
+  de iniciar sesión. Cambiarlo recrea la Activity (`MainActivity` extiende
+  `AppCompatActivity`; el tema pasó a `Theme.AppCompat.Light.NoActionBar`, que AppCompat
+  exige — Compose y `enableEdgeToEdge()` siguen igual); `AppLocalesMetadataHolderService`
+  (`autoStoreLocales=true` en el manifest) hace que se recuerde, y
+  `res/xml/locales_config.xml` lo ofrece también en Ajustes del sistema > Idioma por app.
+  Los textos viven en `res/values/strings.xml` (español, por defecto) y
+  `res/values-en/strings.xml`; los Composables usan `stringResource(...)`. **Lo que se
+  guarda en Firestore sigue en español** (categorías, departamentos, materias primas,
+  colores, tamaños, clasificaciones, niveles de valoración, `rol`): solo se traduce la
+  etiqueta que se muestra, con mapas valor → `@StringRes` en `CatalogosProducto`
+  (`etiquetaCategoria`, `etiquetaMateriaPrima`, `etiquetaColor`, `etiquetaTamano`,
+  `etiquetaClasificacion`) y los helpers de `util/Etiquetas.kt`; un valor sin traducción
+  (texto libre de un producto antiguo, un departamento) se muestra tal cual. Los ViewModels
+  de registro no guardan ningún `Context`: reportan sus errores de validación con ids de
+  recurso (`onErrorRes`). El contenido que escriben los artesanos no se traduce (la propia
+  `AccountSettingsScreen` lo avisa). Qué pantallas faltan por traducir: ver "Estado actual
+  y pendientes".
 - **Insignia RUAC — solicitud y verificación (Fase 5)**: en su propio perfil, un artesano
   sin RUAC verificado ve "Agregar RUAC" (o "Volver a solicitar RUAC" si fue rechazado);
   abre `RequestRuacScreen` (número de registro, región, técnica y un documento/foto
@@ -1260,6 +1425,14 @@ compacta `BarraValoracionCompacta` (solo la barra, sin texto, para no hacer crec
 tarjeta). `QualityTrustScreen` queda fuera de este rediseño a propósito y conserva su
 barra plana + "Nivel: `<etiqueta>`".
 
+`RoleSelectionScreen` ya no usa `GlassCard` para las dos opciones: son tarjetas de **fondo
+blanco sólido** con texto e ícono en vinotinto (`Guinda` el título, `Borgona` la
+descripción y el ícono) para que se lean sobre el patrón textil. Los íconos son vectores
+propios, `res/drawable/ic_artesano.xml` (vasija) e `ic_cliente.xml` (bolsa de compras),
+tintados desde el `Icon`; el filtro del catálogo usa `ic_filtros.xml` — no hay
+`material-icons-extended`, así que todo ícono que no esté en el set básico va como vector
+propio (igual que `ic_visibility`).
+
 `Type.kt` usa **Fraunces** (titulares, saludos, logotipo) y **Plus Jakarta Sans**
 (interfaz) como fuentes reales, no como sustitutos temporales. Google Fonts no distribuye
 ninguna de las dos como archivos estáticos por peso, así que cada `FontFamily` carga un
@@ -1268,6 +1441,16 @@ ninguna de las dos como archivos estáticos por peso, así que cada `FontFamily`
 `FontVariation.Settings` sobre el eje `wght` (API experimental de Compose,
 `@OptIn(ExperimentalTextApi::class)` en el propio archivo). Fraunces fija además el eje
 óptico (`opsz`) en un valor alto porque solo se usa en titulares.
+
+**Logo y eslogan**: el logo oficial es `res/drawable/logo1.png` y el eslogan es
+"Cultura viva a tu alcance" (`R.string.eslogan`, con traducción al inglés; el
+`contentDescription` es `logo_descripcion`). El logo se muestra **recortado en círculo**
+(`LogoCircular`, con una ampliación de 1,3× dentro del círculo para que "MINKA ART" se lea
+en tamaños pequeños; el PNG es blanco sobre vinotinto, no se le quitó el fondo). Aparece en
+Bienvenida (`LogoMinka`: logo + eslogan, que reemplazó al antiguo `welcome_lema`, ya
+eliminado) y en el encabezado de Home cliente y Home artesano (solo logo + eslogan) y del
+panel del administrador "Solicitudes de RUAC" (con su título) — `LogoMinkaEncabezado`.
+Login, Selección de rol y Registro no llevan logo. No hay Splash Screen.
 
 Las pantallas de Entrada, Login y Registro usan además el patrón textil
 `res/drawable/bg_pattern_tejido.jpg` como fondo decorativo, superpuesto a un degradado
@@ -1291,13 +1474,11 @@ Comandos (PowerShell / cmd, desde la raíz del proyecto):
 En Linux/macOS, usar `./gradlew` en lugar de `.\gradlew.bat`.
 
 **Cloud Functions** (`functions/`, Node.js + TypeScript): requieren el CLI de Firebase
-(`npm install -g firebase-tools`) y, una sola vez, una cuenta de Gmail con verificación en
-dos pasos y una [contraseña de aplicación](https://myaccount.google.com/apppasswords),
-registrada como par de secretos:
+(`npm install -g firebase-tools`) y, una sola vez, una cuenta de [Resend](https://resend.com) y su API key
+(`re_...`), registrada como secreto:
 
 ```powershell
-firebase functions:secrets:set GMAIL_USER
-firebase functions:secrets:set GMAIL_APP_PASSWORD
+firebase functions:secrets:set RESEND_API_KEY
 ```
 
 Para compilar y desplegar:
@@ -1375,6 +1556,14 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
 ## Estado actual y pendientes
 
 **Implementado**
+- Términos y Condiciones obligatorios en todos los registros (con `aceptoTerminos`,
+  `terminosAceptadosEn` y `versionTerminos` guardados), registro de artesano con
+  departamentos y categorías de selección múltiple (`MinkaMultiSelectField`), tarjetas
+  blancas en `RoleSelectionScreen`, idioma español/inglés (parcial, ver pendientes),
+  filtros de material/color/tamaño en un bottom sheet del catálogo del cliente, campos
+  `color`/`tamano` en Publicar/Editar producto, y foto de perfil del artesano en el
+  Detalle de producto — ver "Términos y condiciones", "Configuración de idioma" y
+  "Catálogo del cliente" en Flujos principales.
 - Selección de rol antes del registro (`RoleSelectionScreen`), ojo para ver la contraseña,
   "Confirmar contraseña" (Registro y Admin) y "Continuar con Google" en Login y Registro.
 - Registro de cliente y artesano (con validaciones), incluido el flujo de RUAC.
@@ -1464,12 +1653,14 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
   visual" en Flujos principales.
 
 **Pendiente / placeholder**
-- **Google Sign-In sin configurar en el repo**: `app/google-services.json` todavía tiene
-  `"oauth_client": []`, así que `R.string.default_web_client_id` no existe y el proyecto no
-  compila hasta seguir los pasos de "Inicio de sesión con Google" (Configuración y
-  ejecución). No se probó en dispositivo: queda por verificar el caso de un correo que ya
-  existe con contraseña — como el registro por código no marca `emailVerified` en Firebase
-  Auth, Firebase podría reemplazar ese proveedor en vez de lanzar la colisión.
+- **Google Sign-In: configurado en el repo pero sin probar en dispositivo**:
+  `app/google-services.json` ya trae los `oauth_client` (tipos 1 y 3), así que
+  `R.string.default_web_client_id` existe y `assembleDebug` compila (verificado en el
+  ajuste de términos/idiomas). Aun así los pasos de Firebase Console de "Inicio de sesión
+  con Google" (proveedor activado, SHA-1) deben estar hechos para que funcione de verdad, y
+  queda por verificar el caso de un correo que ya existe con contraseña — como el registro
+  por código no marca `emailVerified` en Firebase Auth, Firebase podría reemplazar ese
+  proveedor en vez de lanzar la colisión.
 - **Regla de Firestore permisiva en `usuarios`** (archivo `y`): `allow create` solo exige
   `request.auth.uid == userId`, sin restringir `rol`, así que desde fuera de la app se
   podría crear un documento propio con `rol = "administrador"` (también antes de Google).
@@ -1478,10 +1669,46 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
 - `ProfileScreen.kt` sigue siendo un `Text()` de una línea — ya no lo usa ninguna
   pantalla (`ARTISAN_PROFILE`/`CLIENT_PROFILE` lo reemplazaron), se dejó sin tocar ni
   eliminar por quedar fuera del alcance de la Fase 4.
-- `Routes.ACCOUNT_SETTINGS` sigue registrada y navegable, pero apunta a un
-  `PlaceholderScreen` genérico — la configuración de la cuenta es de una fase futura.
-  (`Routes.RECOGNITION` ya no es placeholder — ver "Búsqueda visual"; `RUAC_BADGE` y
-  `PURCHASE_HISTORY` tampoco lo son desde las Fases 5 y 6.)
+- `Routes.ACCOUNT_SETTINGS` ya no es un placeholder: `AccountSettingsScreen` es la Configuración de cliente (solo nombre/correo, idioma y ayuda) y de artesano (completa: info básica → `EDIT_PROFILE`, cambio de contraseña  por correo de Firebase, switches de notificaciones push, idioma, ayuda, cerrar sesión; el  artesano suma "Mi insignia RUAC" y "Mi taller", que lleva a su perfil público). Los  switches de notificaciones se guardan solo en `SharedPreferences` del dispositivo  (`preferencias_notificaciones`) y los respeta `MinkaMessagingService`; no se guardan en  Firestore. "Ayuda y soporte" abre la app de correo hacia `CORREO_SOPORTE` (`minka.art.app@gmail.com`, en `AccountSettingsScreen.kt`); si no hay app de correo, muestra un diálogo con el correo y un botón para copiarlo. No hay borrado  de cuenta. `PlaceholderScreen.kt` quedó sin ningún uso, se dejó sin eliminar.
+  (`Routes.RECOGNITION`, `RUAC_BADGE` y `PURCHASE_HISTORY` tampoco son placeholders.)
+- **El texto legal de `TermsScreen` es una plantilla, no está revisada por un abogado**, y
+  conserva los placeholders `[nombre del responsable]` y `[correo de contacto]` (en
+  `terms_s1_cuerpo` y `terms_s4_cuerpo` de los dos `strings.xml`). Hay que completarlos y
+  validar el texto (Ley 1581 de 2012, Decreto 1377 de 2013, Ley 1480 de 2011; el aviso de
+  privacidad y el registro de bases de datos ante la SIC, si aplican, tampoco están
+  hechos) antes de publicar la app. Además: la regla de Firestore deja que cualquier
+  usuario autenticado lea el documento completo de cualquier otro (incluidos `correo`,
+  `fechaNacimiento` y datos de RUAC — ver Modelo de datos); `TermsScreen` solo dice que
+  "los demás usuarios con sesión iniciada pueden ver los datos de tu perfil", y conviene
+  revisar si eso es compatible con la política real antes de publicar. Los usuarios
+  anteriores a este ajuste no aceptaron los términos (`aceptoTerminos == false`) y la app
+  no se los pide.
+- **Traducción español/inglés incompleta**. Traducidas (todo el texto de UI, errores de
+  validación de registro y etiquetas de catálogos): `WelcomeScreen` (con selector ES|EN),
+  `LoginScreen`, `RoleSelectionScreen`, `RegisterScreen`, `TermsScreen`,
+  `AccountSettingsScreen`, `HomeClienteScreen` (incluido el bottom sheet de filtros y los
+  chips de categoría) y `ProductDetailScreen` (más `BarraValoracion` y los textos de
+  catálogo que muestran). **Siguen solo en español**: `AdminRegisterScreen` (salvo la
+  casilla de términos y la leyenda de contraseña), `HomeArtesanoScreen`,
+  `MyProductsScreen`, `PublicationScreen`, `EditProductScreen`, `ArtisanProfileScreen`,
+  `ClientProfileScreen`, `LikesScreen`, `NotificationsScreen`, `RecognitionScreen`,
+  `RequestRuacScreen`, `RuacBadgeScreen`, `RegisterSaleScreen`, `RateSaleScreen`,
+  `PurchaseHistoryScreen`, `QualityTrustScreen`, `AdminRuac*Screen`,
+  `AdminVisualEvalScreen`, `ProductoFeedCard`, `BottomNavBar`/`IconoNotificaciones` y las
+  etiquetas de nivel de `EscalaValoracion` ("Excelente", "Muy alta"…, que sí se guardan en
+  Firestore en español y habría que mapear solo al mostrarlas). También quedan en español
+  los mensajes de respaldo `error.message ?: "…"` de los repositorios, el texto de las
+  notificaciones push/`notificaciones` (lo escriben las Cloud Functions), los mensajes de
+  validación de `ProductViewModel` y el mensaje prellenado de WhatsApp que se
+  envía al artesano. Los nombres de departamentos son nombres propios y no se traducen. El
+  contenido que escriben los artesanos (nombre, descripción e historia de producto, bio)
+  **no se traduce**, por diseño. Cambiar de idioma recrea la Activity; el idioma se
+  recuerda (AppCompat `autoStoreLocales`). Solo se probó que compila: no se ejecutó en
+  dispositivo ni emulador.
+- **Reglas de Firestore y Storage por desplegar**: `y` (nuevos `color`/`tamano` en
+  `productoBaseIgual`) y `storage.rules` (ya existían los de `usuarios/{uid}/…`) no se
+  despliegan solos — sin desplegar `y`, un cliente no podrá dar like/valorar un producto que
+  ya tenga `color`/`tamano` guardado.
 - **Límites honestos del motor ANTERIOR (`MotorHuellaVisual`, en transición — ya no
   participa en la búsqueda real, ver "Búsqueda visual")**: sigue sin ser reconocimiento
   de objetos —
@@ -1580,9 +1807,11 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
   el motor nuevo es al menos igual de bueno — a la fecha de este ajuste, esa comparación
   todavía no se corrió (no hay fotos de prueba en el repositorio, ver
   `app/src/debug/assets/evaluacion/README.txt`).
-- No existe ningún campo de foto de perfil (`fotoUrl` o similar) ni flujo de subida de
-  imagen de perfil — el avatar de `ClientProfileScreen` y `ArtisanProfileScreen` siempre
-  muestra un ícono por defecto.
+- Foto de perfil: implementada para cliente y artesano (`User.fotoUrl`, Storage
+  `usuarios/{uid}/foto_perfil`), se muestra en `ClientProfileScreen`, `ArtisanProfileScreen`
+  y en la fila del artesano de `ProductDetailScreen`. Pendiente: no se recorta ni se
+  comprime la imagen antes de subirla, no se borra la foto anterior al reemplazarla (se
+  sobrescribe el mismo archivo) y no se muestra en el feed ni en las notificaciones.
 - `QualityTrustScreen` no se actualizó al rediseño de Calidad/Confianza (decisión de
   alcance): sigue con su barra plana + "Nivel: `<etiqueta>`", no usa `BarraValoracion`.
 - El canal de notificaciones se renombró de `"ventas_pendientes"` a `"minka_avisos"` al
@@ -1626,11 +1855,12 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
 - Un correo que ya tiene cuenta en Firebase Auth solo se detecta al final del registro,
   al llamar a `createUserWithEmailAndPassword` después de verificar el código (la Cloud
   Function `enviarCodigoVerificacion` no comprueba si el correo ya está registrado).
-- El correo de verificación se envía por el SMTP de Gmail (remitente `@gmail.com`), con el
-  límite de envío propio de Gmail de aproximadamente 500 correos/día; suficiente para
-  desarrollo y pruebas, pero no para producción a gran escala. Si se necesita un remitente
-  con dominio propio y sin ese límite, hay que verificar un dominio en un proveedor
-  transaccional (p. ej. Resend).
+- Los correos (código de verificación y cambio de contraseña) se envían por el SMTP de Gmail
+  (`PROVEEDOR_CORREO = "gmail"`, ~500 correos/día). Resend está cableado pero **sin dominio
+  verificado solo entrega a `minka.art.app@gmail.com`** (y no deja enviar desde `@gmail.com`);
+  para usarlo hay que verificar un dominio (DNS SPF/DKIM), cambiar `REMITENTE` y poner
+  `PROVEEDOR_CORREO = "resend"`. Las respuestas van a
+  `minka.art.app@gmail.com` (`RESPONDER_A`).
 - La cuenta de Firebase Auth creada al final del registro queda con `emailVerified =
   false`, porque la verificación la hace la Cloud Function contra Firestore, no el
   mecanismo nativo de Firebase Auth. `isEmailVerified` no se comprueba en ningún punto

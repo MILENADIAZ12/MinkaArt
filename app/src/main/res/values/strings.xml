@@ -1,3 +1,322 @@
 <resources>
     <string name="app_name">MinkaArt_bta</string>
+
+    <!-- =========================
+         Idioma por defecto: español. El inglés está en res/values-en/strings.xml.
+         Toda clave nueva va en los DOS archivos.
+         ========================= -->
+
+    <!-- Comunes -->
+    <string name="aceptar">Aceptar</string>
+    <string name="cancelar">Cancelar</string>
+    <string name="volver">Volver</string>
+    <string name="cerrar">Cerrar</string>
+    <string name="si">Sí</string>
+    <string name="no">No</string>
+    <string name="todos">Todos</string>
+    <string name="sin_especificar">Sin especificar</string>
+    <string name="selecciona_opcion">Selecciona una opción</string>
+    <string name="selecciona_opciones">Selecciona una o más opciones</string>
+    <string name="campos_obligatorios">* Campos obligatorios</string>
+    <string name="mostrar_contrasena">Mostrar contraseña</string>
+    <string name="ocultar_contrasena">Ocultar contraseña</string>
+    <string name="me_gusta">Me gusta</string>
+
+    <!-- Entrada y rol -->
+    <string name="eslogan">Cultura viva a tu alcance</string>
+    <string name="logo_descripcion">Logo de Minka Art</string>
+    <string name="registrarse">Registrarse</string>
+    <string name="iniciar_sesion">Iniciar sesión</string>
+    <string name="rol_como_usar">¿Cómo quieres usar MinkaArt?</string>
+    <string name="rol_soy_artesano">Soy artesano</string>
+    <string name="rol_artesano_desc">Publica tus artesanías, cuenta su historia y conecta directamente con quienes las buscan.</string>
+    <string name="rol_soy_cliente">Soy cliente</string>
+    <string name="rol_cliente_desc">Descubre artesanías colombianas, guarda tus favoritas y contacta a quienes las hacen.</string>
+    <string name="rol_no_valido">El rol del usuario no es válido: %1$s</string>
+
+    <!-- Login -->
+    <string name="login_bienvenido">Bienvenido de nuevo</string>
+    <string name="login_subtitulo">Ingresa a tu cuenta Minka Art</string>
+    <string name="campo_correo">Correo electrónico</string>
+    <string name="campo_contrasena">Contraseña</string>
+    <string name="recuerdame">Recuérdame</string>
+    <string name="olvidaste_contrasena">¿Olvidaste tu contraseña?</string>
+    <string name="iniciar_sesion_mayus">INICIAR SESIÓN</string>
+    <string name="continuar_google">Continuar con Google</string>
+    <string name="no_tienes_cuenta">¿No tienes cuenta? </string>
+    <string name="registrate">Regístrate</string>
+    <string name="ingresa_correo_recuperar">Ingresa tu correo para recuperar la contraseña</string>
+    <string name="correo_recuperacion_enviado">Correo de recuperación enviado</string>
+    <string name="ingresa_correo_y_contrasena">Ingresa correo y contraseña</string>
+
+    <!-- Registro -->
+    <string name="registro_titulo">Crea tu cuenta</string>
+    <string name="registro_como_artesano">Te registras como artesano</string>
+    <string name="registro_como_cliente">Te registras como cliente</string>
+    <string name="cambiar_rol">Cambiar rol</string>
+    <string name="cuenta_de_google">Cuenta de Google: %1$s (%2$s)</string>
+    <string name="campo_nombre_completo">Nombre completo *</string>
+    <string name="campo_correo_obligatorio">Correo electrónico *</string>
+    <string name="campo_contrasena_obligatorio">Contraseña *</string>
+    <string name="campo_confirmar_contrasena">Confirmar contraseña *</string>
+    <string name="contrasena_cifrada">🔒 Tu contraseña se guarda cifrada</string>
+    <string name="info_artesano">Información del artesano</string>
+    <string name="campo_telefono">Número de teléfono *</string>
+    <string name="campo_fecha_nacimiento">Fecha de nacimiento *</string>
+    <string name="seleccionar_fecha_nacimiento">Seleccionar fecha de nacimiento</string>
+    <string name="selecciona_fecha">Selecciona una fecha</string>
+    <string name="fecha_nacimiento_futura">La fecha de nacimiento no puede ser futura</string>
+    <string name="campo_departamentos">Departamentos donde trabajas *</string>
+    <string name="campo_productos_que_vendes">¿Qué productos artesanales vendes? *</string>
+    <string name="campo_categorias_artesanales">Categorías artesanales *</string>
+    <string name="campo_especifica_cual">Especifica cuál *</string>
+    <string name="tienes_ruac">¿Tienes registro RUAC?</string>
+    <string name="campo_numero_ruac">Número de registro RUAC *</string>
+    <string name="adjuntar_ruac">Adjuntar documento RUAC</string>
+    <string name="cambiar_ruac">Cambiar documento RUAC</string>
+    <string name="ruac_seleccionado">Documento RUAC seleccionado correctamente</string>
+    <string name="acepto_terminos_prefijo">Acepto los </string>
+    <string name="acepto_terminos_enlace">Términos y Condiciones</string>
+    <string name="acepto_terminos_sufijo"> y la Política de Tratamiento de Datos Personales *</string>
+    <string name="completar_registro">Completar registro</string>
+    <string name="registro_exitoso">Has sido registrado correctamente</string>
+    <string name="registro_exitoso_boton">✓ Has sido registrado correctamente</string>
+    <string name="codigo_enviado_info">Te enviamos un código de 6 dígitos a tu correo. Ingrésalo aquí abajo; expira en 10 minutos.</string>
+    <string name="campo_codigo">Código de 6 dígitos</string>
+    <string name="verificar">Verificar</string>
+    <string name="reenviar_codigo">Reenviar código</string>
+    <string name="codigo_reenviado">Código de verificación reenviado</string>
+    <string name="codigo_enviado_toast">Te enviamos un código de verificación</string>
+    <string name="enviar_codigo">Enviar código de verificación</string>
+    <string name="eres_administrador">¿Eres administrador? Regístrate aquí</string>
+
+    <!-- Errores de validación (los muestran los ViewModels de registro por id de recurso) -->
+    <string name="err_ingresa_nombre">Ingresa tu nombre</string>
+    <string name="err_ingresa_correo">Ingresa tu correo electrónico</string>
+    <string name="err_contrasena_corta">La contraseña debe tener mínimo 6 caracteres</string>
+    <string name="err_contrasenas_no_coinciden">Las contraseñas no coinciden</string>
+    <string name="err_acepta_terminos">Debes aceptar los términos y condiciones para continuar</string>
+    <string name="err_telefono">Ingresa tu número de teléfono</string>
+    <string name="err_fecha_nacimiento">Selecciona tu fecha de nacimiento</string>
+    <string name="err_departamentos">Selecciona al menos un departamento</string>
+    <string name="err_productos_que_vende">Indica qué productos artesanales vendes</string>
+    <string name="err_categorias_artesanales">Selecciona al menos una categoría artesanal</string>
+    <string name="err_categoria_otros">Especifica tu categoría en \"Especifica cuál\"</string>
+    <string name="err_ruac_numero">Ingresa el número de registro RUAC</string>
+    <string name="err_ruac_documento">Debes adjuntar tu documento RUAC</string>
+    <string name="err_pin_admin">Ingresa el PIN de acceso de administrador</string>
+    <string name="err_usuario_no_autenticado">No se pudo obtener el usuario autenticado</string>
+    <string name="err_sin_registro_pendiente">No hay un registro pendiente de confirmar</string>
+    <string name="err_codigo_vacio">Ingresa el código de 6 dígitos que recibiste por correo</string>
+
+    <!-- Home del cliente -->
+    <string name="modo_cliente">Cliente</string>
+    <string name="modo_artesano">Artesano</string>
+    <string name="buscar_placeholder">Buscar artesanía, técnica, región…</string>
+    <string name="sin_publicaciones">Todavía no hay artesanías publicadas</string>
+    <string name="sin_resultados_criterio">No encontramos artesanías con ese criterio</string>
+    <string name="nav_inicio">Inicio</string>
+    <string name="nav_buscar">Buscar</string>
+    <string name="nav_likes">Likes</string>
+    <string name="nav_perfil">Perfil</string>
+    <string name="filtros_titulo">Filtros</string>
+    <string name="filtros_material">Material</string>
+    <string name="filtros_color">Color</string>
+    <string name="filtros_tamano">Tamaño</string>
+    <string name="filtros_aplicar">Aplicar</string>
+    <string name="filtros_limpiar">Limpiar filtros</string>
+    <string name="filtros_sin_opciones">Aún no hay artesanías con este dato.</string>
+
+    <!-- Detalle de producto -->
+    <string name="detalle_descripcion">Descripción</string>
+    <string name="detalle_historia">Historia y proceso</string>
+    <string name="detalle_region">Región de origen</string>
+    <string name="calidad">Calidad</string>
+    <string name="confianza">Confianza</string>
+    <string name="sin_verificaciones">Sin verificaciones</string>
+    <string name="una_verificacion">%1$d verificación</string>
+    <string name="n_verificaciones">%1$d verificaciones</string>
+    <string name="con_registro_ruac">Con registro RUAC</string>
+    <string name="contactar_artesano">Contactar artesano</string>
+    <string name="sin_telefono_artesano">Este artesano no tiene un teléfono de contacto registrado</string>
+    <string name="no_se_pudo_abrir_whatsapp">No se pudo abrir WhatsApp ni el marcador de llamadas</string>
+
+    <!-- Configuración de la cuenta -->
+    <string name="config_cuenta_titulo">Configuración de la cuenta</string>
+    <string name="idioma_titulo">Idioma / Language</string>
+    <string name="idioma_nota">Los textos que escriben los artesanos (nombres, descripciones, historias) no se traducen.</string>
+
+    <!-- Términos y condiciones -->
+    <string name="terms_titulo">Términos y Condiciones</string>
+    <string name="terms_version">Versión %1$s</string>
+    <string name="terms_s1_titulo">1. Quiénes somos y alcance</string>
+    <string name="terms_s1_cuerpo">MinkaArt es una aplicación que conecta a artesanos colombianos con personas interesadas en comprar artesanías. Al crear una cuenta aceptas estos Términos y Condiciones y la Política de Tratamiento de Datos Personales, que se rigen por la Ley 1581 de 2012 (Habeas Data), el Decreto 1377 de 2013 y la Ley 1480 de 2011 (Estatuto del Consumidor).\n\nResponsable del tratamiento: [nombre del responsable].\nCanal de contacto para consultas, peticiones y reclamos sobre tus datos: [correo de contacto].</string>
+    <string name="terms_s2_titulo">2. Datos personales que recogemos</string>
+    <string name="terms_s2_cuerpo">Según tu rol, recogemos:\n• Todos los usuarios: nombre, correo electrónico y, si la subes, tu foto de perfil.\n• Artesanos: además, teléfono, fecha de nacimiento, departamentos donde trabajan, productos y categorías artesanales y, si lo indican, el número y el documento de su registro RUAC.\n• Información de uso dentro de la app: productos que publicas, me gusta, ventas registradas y valoraciones.\n• Un identificador técnico de tu dispositivo (token de notificaciones) para enviarte avisos.\n\nPara que el marketplace funcione, los demás usuarios con sesión iniciada pueden ver los datos de tu perfil.</string>
+    <string name="terms_s3_titulo">3. Finalidad del tratamiento</string>
+    <string name="terms_s3_cuerpo">Usamos tus datos para:\n• Operar el marketplace: crear tu cuenta y mostrar tu perfil y tus productos.\n• Permitir el contacto entre artesanos y clientes.\n• Verificar el registro RUAC de los artesanos.\n• Enviarte notificaciones sobre ventas, valoraciones, me gusta y el estado de tu RUAC.\n• Mantener la seguridad de la aplicación.</string>
+    <string name="terms_s4_titulo">4. Tus derechos como titular</string>
+    <string name="terms_s4_cuerpo">Como titular de los datos puedes:\n• Conocer, actualizar y rectificar tus datos personales.\n• Solicitar prueba de la autorización que nos diste.\n• Ser informado sobre el uso que se ha dado a tus datos.\n• Presentar quejas ante la Superintendencia de Industria y Comercio por infracciones a la ley.\n• Revocar la autorización y/o solicitar la supresión de tus datos cuando no se respeten los principios, derechos y garantías legales.\n• Acceder de forma gratuita a tus datos.\n\nPara ejercer estos derechos escribe a [correo de contacto]. Responsable: [nombre del responsable].</string>
+    <string name="terms_s5_titulo">5. Compras entre artesanos y compradores (Ley 1480 de 2011)</string>
+    <string name="terms_s5_cuerpo">MinkaArt es una plataforma que conecta a artesanos con compradores; no vende las artesanías ni es parte del contrato de compraventa. La venta, el precio final, el pago y la entrega se acuerdan directamente entre el artesano y el comprador, por ejemplo por WhatsApp. MinkaArt no procesa pagos.\n\nCada artesano es responsable de la información, la calidad, el precio y la disponibilidad de los productos que publica. Como consumidor conservas los derechos que te reconoce la Ley 1480 de 2011 frente a quien te vende: información veraz y suficiente, calidad e idoneidad, garantía y, cuando aplique, retracto en ventas a distancia.</string>
+    <string name="terms_s6_titulo">6. Seguridad de tu contraseña</string>
+    <string name="terms_s6_cuerpo">Tu contraseña se almacena protegida (cifrada mediante un algoritmo de hash) por Firebase Authentication. MinkaArt nunca la guarda en su base de datos ni puede verla.</string>
+    <string name="terms_s7_titulo">7. Aceptación y cambios</string>
+    <string name="terms_s7_cuerpo">Al marcar la casilla de aceptación y crear tu cuenta confirmas que leíste este texto y autorizas el tratamiento de tus datos en los términos descritos. Guardamos la fecha y la versión del texto que aceptaste. Podemos actualizar este texto; la versión vigente es la que se muestra en esta pantalla.</string>
+
+    <!-- Catálogos: categorías -->
+    <string name="cat_textileria">Textilería y tejeduría</string>
+    <string name="cat_cesteria">Cestería y fibras vegetales (paja, mimbre, palma)</string>
+    <string name="cat_alfareria">Alfarería y cerámica</string>
+    <string name="cat_marroquineria">Marroquinería y talabartería (trabajo en cuero)</string>
+    <string name="cat_joyeria">Joyería y orfebrería (metales y piedras preciosas)</string>
+    <string name="cat_metaleria">Metalistería y forja (hierro, bronce, cobre)</string>
+    <string name="cat_talla">Talla y ebanistería en madera</string>
+    <string name="cat_canteria">Cantería y escultura en piedra</string>
+    <string name="cat_vidrieria">Vidriería y vidrio soplado</string>
+    <string name="cat_papel">Papel y cartonería (papel maché)</string>
+    <string name="cat_cereria">Cerería (velas artesanales)</string>
+    <string name="cat_jugueteria">Juguetería artesanal</string>
+    <string name="cat_hueso">Trabajo en hueso, cuerno, concha y coral</string>
+    <string name="cat_pintura">Pintura popular y lacas</string>
+    <string name="cat_moda">Moda</string>
+    <string name="cat_otros">Otros</string>
+
+    <!-- Catálogos: clasificaciones -->
+    <string name="clas_indigena">Artesanía indígena</string>
+    <string name="clas_tradicional">Artesanía tradicional popular</string>
+    <string name="clas_contemporanea">Artesanía contemporánea o neoartesanía</string>
+
+    <!-- Catálogos: colores y tamaños -->
+    <string name="color_natural">Natural/crudo</string>
+    <string name="color_blanco">Blanco</string>
+    <string name="color_negro">Negro</string>
+    <string name="color_cafe">Café</string>
+    <string name="color_rojo">Rojo</string>
+    <string name="color_naranja">Naranja</string>
+    <string name="color_amarillo">Amarillo</string>
+    <string name="color_verde">Verde</string>
+    <string name="color_azul">Azul</string>
+    <string name="color_morado">Morado</string>
+    <string name="color_rosado">Rosado</string>
+    <string name="color_gris">Gris</string>
+    <string name="color_multicolor">Multicolor</string>
+    <string name="tam_pequeno">Pequeño (menos de 15 cm)</string>
+    <string name="tam_mediano">Mediano (15–40 cm)</string>
+    <string name="tam_grande">Grande (más de 40 cm)</string>
+
+    <!-- Catálogos: materias primas -->
+    <string name="mat_algodon">Algodón</string>
+    <string name="mat_lana">Lana</string>
+    <string name="mat_alpaca">Fibra de alpaca</string>
+    <string name="mat_seda">Seda</string>
+    <string name="mat_acrilico">Acrílico</string>
+    <string name="mat_lino">Lino</string>
+    <string name="mat_fique">Fique</string>
+    <string name="mat_cabuya">Cabuya</string>
+    <string name="mat_iraca">Iraca</string>
+    <string name="mat_cumare">Cumare</string>
+    <string name="mat_chocolatillo">Chocolatillo</string>
+    <string name="mat_palma">Palma</string>
+    <string name="mat_cana_flecha">Caña flecha</string>
+    <string name="mat_junco">Junco</string>
+    <string name="mat_mimbre">Mimbre</string>
+    <string name="mat_chambira">Chambira</string>
+    <string name="mat_werregue">Werregue</string>
+    <string name="mat_paja_tetera">Paja tetera</string>
+    <string name="mat_enea">Enea</string>
+    <string name="mat_cuero">Cuero</string>
+    <string name="mat_cuero_ecologico">Cuero ecológico</string>
+    <string name="mat_hueso">Hueso</string>
+    <string name="mat_cacho">Cacho o asta</string>
+    <string name="mat_concha">Concha</string>
+    <string name="mat_coral">Coral</string>
+    <string name="mat_plumas">Plumas</string>
+    <string name="mat_plata">Plata</string>
+    <string name="mat_plata_950">Plata 950</string>
+    <string name="mat_oro">Oro</string>
+    <string name="mat_cobre">Cobre</string>
+    <string name="mat_bronce">Bronce</string>
+    <string name="mat_hierro">Hierro</string>
+    <string name="mat_laton">Latón</string>
+    <string name="mat_chaquiras">Chaquiras</string>
+    <string name="mat_mostacilla">Mostacilla</string>
+    <string name="mat_semillas">Semillas</string>
+    <string name="mat_madera">Madera</string>
+    <string name="mat_guadua">Guadua</string>
+    <string name="mat_balso">Balso</string>
+    <string name="mat_piedra">Piedra</string>
+    <string name="mat_totumo">Totumo o calabazo</string>
+    <string name="mat_tagua">Tagua</string>
+    <string name="mat_barro">Barro o arcilla</string>
+    <string name="mat_vidrio">Vidrio</string>
+    <string name="mat_ceramica">Cerámica</string>
+    <string name="mat_papel_mache">Papel maché</string>
+    <string name="mat_cera">Cera</string>
+    <string name="mat_caucho">Caucho</string>
+    <string name="mat_textil_reciclado">Textil reciclado</string>
+    <string name="mat_otra">Otra</string>
+    <!-- Panel de filtros, insignia RUAC y configuración (rediseño) -->
+    <string name="filtros_limpiar_todo">Limpiar todo</string>
+    <string name="filtros_limpiar_corto">Limpiar</string>
+    <string name="filtros_ubicacion">Ubicación</string>
+    <string name="filtros_todos_materiales">Todos los materiales</string>
+    <string name="filtros_todas_ubicaciones">Todas las ubicaciones</string>
+    <string name="filtros_todos_tamanos">Todos los tamaños</string>
+    <string name="filtros_elegir_color">Elegir color</string>
+    <string name="filtros_anadir_color">+ Añadir otro color</string>
+    <string name="filtros_quitar_color">Quitar color</string>
+    <string name="filtros_buscar_ubicacion">Buscar ubicación…</string>
+    <string name="filtros_selecciona_uno">Selecciona al menos un filtro</string>
+    <string name="filtros_aplicar_n">Aplicar filtros (%1$d)</string>
+    <string name="filtros_aplicar_sin_n">Aplicar filtros</string>
+    <string name="ruac_titulo_insignia">Insignia RUAC</string>
+    <string name="ruac_verificado">Verificado</string>
+    <string name="ruac_info_registro">Información del registro</string>
+    <string name="ruac_registro">Registro RUAC</string>
+    <string name="ruac_region">Región</string>
+    <string name="ruac_tecnica">Técnica registrada</string>
+    <string name="ruac_verificado_desde">Verificado desde</string>
+    <string name="ruac_ultima_validacion">Última validación</string>
+    <string name="ruac_por_que">¿POR QUÉ ES IMPORTANTE?</string>
+    <string name="ruac_autenticidad">Autenticidad</string>
+    <string name="ruac_autenticidad_desc">Certifica que es un artesano real registrado en el Registro Único de Artesanos de Colombia.</string>
+    <string name="ruac_confianza">Confianza</string>
+    <string name="ruac_confianza_desc">El cliente sabe que el producto es hecho a mano y de origen verificado.</string>
+    <string name="ruac_comercio_justo">Comercio justo</string>
+    <string name="ruac_comercio_justo_desc">Apoya directamente el oficio y la tradición de la región.</string>
+    <string name="ruac_nota_admin">Esta insignia es revisada y aprobada por un administrador de Minka Art.</string>
+    <string name="ruac_no_verificada">Este artesano no tiene una insignia RUAC verificada</string>
+    <string name="no_especificado">No especificado</string>
+    <string name="config_titulo">Configuración</string>
+    <string name="config_info_basica">Información básica</string>
+    <string name="config_cambiar_foto">Cambiar foto de perfil</string>
+    <string name="config_nombre">Nombre</string>
+    <string name="config_telefono">Teléfono</string>
+    <string name="config_correo">Correo</string>
+    <string name="config_ciudad">Ciudad / región</string>
+    <string name="config_solo_artesanos">Solo artesanos</string>
+    <string name="config_mi_insignia">Mi insignia RUAC</string>
+    <string name="config_mi_taller">Mi taller</string>
+    <string name="config_mi_taller_desc">Descripción, técnica y región</string>
+    <string name="config_seguridad">Seguridad</string>
+    <string name="config_cambiar_contrasena">Cambiar contraseña</string>
+    <string name="config_contrasena_enviada">Te enviamos un correo para cambiar tu contraseña</string>
+    <string name="config_notificaciones">Notificaciones</string>
+    <string name="config_notif_actividad">Mensajes, pedidos y valoraciones</string>
+    <string name="config_notif_likes">Me gusta en mis productos</string>
+    <string name="config_ayuda">Ayuda y soporte</string>
+    <string name="config_cerrar_sesion">Cerrar sesión</string>
+    <string name="config_idioma_seccion">Idioma</string>
+    <string name="editar_info_titulo">Editar información</string>
+    <string name="editar_info_nombre">Nombre completo</string>
+    <string name="editar_info_ayuda">Modifica algún campo para guardar</string>
+    <string name="editar_info_guardar">Guardar cambios</string>
+    <string name="editar_info_guardado">Información actualizada</string>
+    <string name="editar_info_nombre_vacio">El nombre no puede estar vacío</string>
+    <string name="editar_info_correo_nota">El correo de la cuenta no se puede cambiar aquí</string>
+    <string name="soporte_titulo">Ayuda y soporte</string>
+    <string name="soporte_texto">¿Necesitas ayuda? Escríbenos a este correo y te responderemos lo antes posible:</string>
+    <string name="soporte_copiar">Copiar correo</string>
+    <string name="soporte_copiado">Correo copiado</string>
 </resources>

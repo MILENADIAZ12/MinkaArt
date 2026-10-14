@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -204,6 +205,32 @@ fun ArtisanProfileScreen(
                             tint = Guinda,
                             modifier = Modifier.size(14.dp)
                         )
+                    }
+
+                    // Configuración de la cuenta (idioma): solo el dueño del perfil.
+                    if (esPerfilPropio) {
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(12.dp)
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.9f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { navController.navigate(Routes.ACCOUNT_SETTINGS) }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Configuración de la cuenta",
+                                tint = Guinda,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
 
                     Box(

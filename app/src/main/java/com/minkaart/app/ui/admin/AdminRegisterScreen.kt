@@ -31,10 +31,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.compose.ui.res.stringResource
+import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.BotonOjoContraseña
+import com.minkaart2.app.ui.components.CheckboxTerminos
 import com.minkaart2.app.ui.components.GlassCard
 import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
@@ -58,7 +63,11 @@ fun AdminRegisterScreen(navController: NavController) {
     var nombre by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
     var contraseña by remember { mutableStateOf("") }
+    var confirmarContraseña by remember { mutableStateOf("") }
+    var verContraseña by remember { mutableStateOf(false) }
+    var verConfirmacion by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
+    var aceptoTerminos by remember { mutableStateOf(false) }
 
     val viewModel: AdminRegisterViewModel = viewModel()
     val context = LocalContext.current
@@ -94,12 +103,20 @@ fun AdminRegisterScreen(navController: NavController) {
                     style = MaterialTheme.typography.bodySmall
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "* Campos obligatorios",
+                    color = Marfil.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 GlassTextField(
                     value = nombre,
                     onValueChange = { nombre = it },
-                    label = "Nombre completo",
+                    label = "Nombre completo *",
                     icon = Icons.Filled.Person,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -107,7 +124,7 @@ fun AdminRegisterScreen(navController: NavController) {
                 GlassTextField(
                     value = correo,
                     onValueChange = { correo = it },
-                    label = "Correo electrónico",
+                    label = "Correo electrónico *",
                     icon = Icons.Filled.Email,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -115,19 +132,63 @@ fun AdminRegisterScreen(navController: NavController) {
                 GlassTextField(
                     value = contraseña,
                     onValueChange = { contraseña = it },
-                    label = "Contraseña",
+                    label = "Contraseña *",
                     icon = Icons.Filled.Lock,
                     modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = if (verContraseña) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        BotonOjoContraseña(
+                            visible = verContraseña,
+                            onAlternar = { verContraseña = !verContraseña }
+                        )
+                    }
+                )
+
+                Text(
+                    text = stringResource(R.string.contrasena_cifrada),
+                    color = Marfil.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                GlassTextField(
+                    value = confirmarContraseña,
+                    onValueChange = { confirmarContraseña = it },
+                    label = "Confirmar contraseña *",
+                    icon = Icons.Filled.Lock,
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (verConfirmacion) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        BotonOjoContraseña(
+                            visible = verConfirmacion,
+                            onAlternar = { verConfirmacion = !verConfirmacion }
+                        )
+                    }
                 )
 
                 GlassTextField(
                     value = pin,
                     onValueChange = { pin = it },
-                    label = "PIN de acceso de administrador",
+                    label = "PIN de acceso de administrador *",
                     icon = Icons.Filled.CheckCircle,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = PasswordVisualTransformation()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CheckboxTerminos(
+                    aceptado = aceptoTerminos,
+                    onCambio = { aceptoTerminos = it },
+                    onAbrirTerminos = { navController.navigate(Routes.TERMS) }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -140,7 +201,9 @@ fun AdminRegisterScreen(navController: NavController) {
                             nombre = nombre,
                             correo = correo,
                             contraseña = contraseña,
+                            confirmarContraseña = confirmarContraseña,
                             pin = pin,
+                            aceptoTerminos = aceptoTerminos,
 
                             onSuccess = {
 
@@ -157,6 +220,14 @@ fun AdminRegisterScreen(navController: NavController) {
 
                             onError = { mensaje ->
                                 Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                            },
+
+                            onErrorRes = { recurso ->
+                                Toast.makeText(
+                                    context,
+                                    context.getString(recurso),
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         )
                     },

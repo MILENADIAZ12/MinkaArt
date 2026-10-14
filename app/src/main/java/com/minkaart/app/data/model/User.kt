@@ -12,11 +12,32 @@ data class User(
 
     // Datos adicionales del artesano
     val fechaNacimiento: String = "",
+
+    // Heredado, solo lectura: reemplazado por `departamentos`. Ningún código nuevo lo
+    // vuelve a escribir; se conserva para que un artesano registrado antes de este ajuste
+    // no pierda su región al leerlo (mismo criterio que Product.regionOrigen).
     val region: String = "",
+
+    // Departamentos donde trabaja el artesano (selección múltiple de
+    // CatalogosProducto.DEPARTAMENTOS).
+    val departamentos: List<String> = emptyList(),
+
     val productosQueVende: String = "",
 
-    // Un artesano puede trabajar varias categorías
+    // Un artesano puede trabajar varias categorías. Los artesanos registrados antes de la
+    // selección múltiple tienen aquí el texto libre que escribieron, y se leen igual.
     val categoriasArtesanales: List<String> = emptyList(),
+
+    // Solo tiene valor cuando categoriasArtesanales incluye CatalogosProducto.CATEGORIA_OTROS
+    // ("Otros"): lo que el artesano escribió en "Especifica cuál".
+    val categoriasArtesanalesOtro: String? = null,
+
+    // Aceptación de los Términos y Condiciones / Política de Tratamiento de Datos
+    // (Ley 1581 de 2012 y Ley 1480 de 2011). Los usuarios registrados antes de esto quedan
+    // con aceptoTerminos == false y versionTerminos == "".
+    val aceptoTerminos: Boolean = false,
+    val terminosAceptadosEn: Timestamp? = null,
+    val versionTerminos: String = "",
 
     // Registro RUAC (Fase 5): reemplaza los campos viejos tieneRuac/numeroRuac/ruacUrl —
     // ver README ("Firestore — colección usuarios") para la nota de migración: un

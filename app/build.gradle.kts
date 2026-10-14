@@ -65,6 +65,8 @@ dependencies {
     implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-messaging")
     implementation(libs.androidx.core.ktx)
+    // Idiomas por app (AppCompatDelegate.setApplicationLocales) — selector Español/English.
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

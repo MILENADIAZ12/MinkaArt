@@ -31,29 +31,12 @@ cd functions
 npm install
 ```
 
-## 5. Configura tu cuenta de Gmail como secreto
-El correo se envía por el SMTP de Gmail (con `nodemailer`), así que necesitas una cuenta de
-Google con verificación en dos pasos activada — puede ser tu cuenta actual o una nueva tipo
-`minkaart.app@gmail.com`.
+## 5. Configura Resend como secreto
+El correo se envía con la API de [Resend](https://resend.com) (código de verificación y enlace de cambio de contraseña).
 
-1. Activa la **verificación en dos pasos** en esa cuenta, si no la tiene.
-2. Crea una **contraseña de aplicación** en <https://myaccount.google.com/apppasswords>.
-   Google te da 16 caracteres — no es tu contraseña normal de Gmail, es una clave aparte y
-   revocable en cualquier momento.
-3. Registra los dos secretos. Nunca van en el código ni en el repo. Desde la carpeta
-   `functions`:
-   ```
-   firebase functions:secrets:set GMAIL_USER
-   firebase functions:secrets:set GMAIL_APP_PASSWORD
-   ```
-   Te va a pedir que pegues el valor de cada uno — pégalo ahí (en la terminal, no en el
-   chat) y presiona Enter. En `GMAIL_USER` va la dirección de Gmail completa, en
-   `GMAIL_APP_PASSWORD` la contraseña de aplicación de 16 caracteres.
-
-Gmail tiene un límite de envío de aproximadamente 500 correos/día, suficiente para
-desarrollo y pruebas. Si más adelante se necesita un remitente con dominio propio y sin ese
-límite, hay que verificar un dominio en un proveedor transaccional (p. ej. Resend) y
-cambiar el bloque de envío en `src/index.ts`.
+1. Crea la cuenta de Resend con `minka.art.app@gmail.com` y genera una API key en <https://resend.com/api-keys> (empieza por `re_`).
+2. Desde la carpeta `functions`: `firebase functions:secrets:set RESEND_API_KEY` y pega la key en la terminal.
+3. Resend no permite enviar desde `@gmail.com`. Sin dominio propio solo sirve `onboarding@resend.dev` (ya configurado), que únicamente entrega al correo de tu cuenta de Resend. Para enviar a cualquier usuario: Resend → Domains → Add Domain, crea los registros DNS (SPF/DKIM) y cambia `REMITENTE` en `src/index.ts`.
 
 ## 6. Despliega las funciones
 ```

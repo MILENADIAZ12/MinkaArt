@@ -83,6 +83,8 @@ fun EditProductScreen(
     var categoria by remember { mutableStateOf("") }
     var categoriaOtro by remember { mutableStateOf("") }
     var clasificacion by remember { mutableStateOf(CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR) }
+    var color by remember { mutableStateOf(CatalogosProducto.SIN_ESPECIFICAR) }
+    var tamano by remember { mutableStateOf(CatalogosProducto.SIN_ESPECIFICAR) }
 
     val imagenesExistentes = remember { mutableStateListOf<String>() }
     val imagenesNuevas = remember { mutableStateListOf<Uri>() }
@@ -151,6 +153,8 @@ fun EditProductScreen(
                 categoriaOtro = producto.categoriaOtro ?: ""
                 clasificacion = producto.clasificacion
                     ?: CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR
+                color = producto.color.ifEmpty { CatalogosProducto.SIN_ESPECIFICAR }
+                tamano = producto.tamano.ifEmpty { CatalogosProducto.SIN_ESPECIFICAR }
 
                 imagenesExistentes.clear()
                 imagenesExistentes.addAll(producto.imagenes)
@@ -342,6 +346,20 @@ fun EditProductScreen(
                     onSeleccionar = { clasificacion = it }
                 )
 
+                MinkaDropdownField(
+                    label = "Color (opcional)",
+                    opciones = listOf(CatalogosProducto.SIN_ESPECIFICAR) + CatalogosProducto.COLORES,
+                    valorSeleccionado = color,
+                    onSeleccionar = { color = it }
+                )
+
+                MinkaDropdownField(
+                    label = "Tamaño (opcional)",
+                    opciones = listOf(CatalogosProducto.SIN_ESPECIFICAR) + CatalogosProducto.TAMANOS,
+                    valorSeleccionado = tamano,
+                    onSeleccionar = { tamano = it }
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 GradientButton(
@@ -375,6 +393,8 @@ fun EditProductScreen(
                             categoriaOtro = categoriaOtro,
                             clasificacion = clasificacion
                                 .takeUnless { it == CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR },
+                            color = if (color == CatalogosProducto.SIN_ESPECIFICAR) "" else color,
+                            tamano = if (tamano == CatalogosProducto.SIN_ESPECIFICAR) "" else tamano,
                             imagenesExistentes = imagenesExistentes.toList(),
                             imagenesNuevasUris = imagenesNuevas.toList(),
 

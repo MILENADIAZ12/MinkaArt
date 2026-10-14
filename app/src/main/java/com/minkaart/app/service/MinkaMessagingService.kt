@@ -13,6 +13,10 @@ import com.minkaart2.app.MainActivity
 import com.minkaart2.app.R
 import com.minkaart2.app.repository.AuthRepository
 
+const val PREFERENCIAS_NOTIFICACIONES = "preferencias_notificaciones"
+const val PREF_NOTIF_ACTIVIDAD = "notif_actividad"
+const val PREF_NOTIF_LIKES = "notif_likes"
+
 private const val CANAL_AVISOS = "minka_avisos"
 private const val EXTRA_TIPO = "tipo"
 private const val EXTRA_REFERENCIA_ID = "referenciaId"
@@ -54,6 +58,13 @@ class MinkaMessagingService : FirebaseMessagingService() {
         val referenciaId = message.data["referenciaId"] ?: return
         val titulo = message.data["titulo"] ?: "MinkaArt"
         val cuerpo = message.data["cuerpo"] ?: ""
+
+        // Preferencias de Configuración → Notificaciones (activadas por defecto). Solo
+        // controlan el aviso push del dispositivo; la lista de la campana no se toca.
+        val preferencias = getSharedPreferences(PREFERENCIAS_NOTIFICACIONES, MODE_PRIVATE)
+        val clavePreferencia = if (tipo == "like") PREF_NOTIF_LIKES else PREF_NOTIF_ACTIVIDAD
+
+        if (!preferencias.getBoolean(clavePreferencia, true)) return
 
         crearCanalDeNotificaciones()
 

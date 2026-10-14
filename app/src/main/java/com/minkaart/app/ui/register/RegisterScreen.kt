@@ -22,11 +22,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -52,13 +51,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.minkaart2.app.R
+import com.minkaart2.app.data.CatalogosProducto
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BotonOjoContraseña
+import com.minkaart2.app.ui.components.CheckboxTerminos
 import com.minkaart2.app.ui.components.GlassCard
 import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.ui.components.MinkaMultiSelectField
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.PatternBackground
+import com.minkaart2.app.util.SesionLocal
+import com.minkaart2.app.util.etiquetaCategoria
 import com.minkaart2.app.viewModel.GoogleSignInViewModel
 import com.minkaart2.app.viewmodel.RegisterViewModel
 import java.time.Instant
@@ -91,6 +96,9 @@ fun RegisterScreen(
     var verContraseña by remember { mutableStateOf(false) }
     var verConfirmacion by remember { mutableStateOf(false) }
 
+    // Términos y Condiciones / Política de Tratamiento de Datos (obligatorio).
+    var aceptoTerminos by remember { mutableStateOf(false) }
+
     // true cuando la persona ya se autenticó con Google y solo falta completar el registro
     // (artesano): sin contraseña ni código de verificación.
     var modoGoogle by remember { mutableStateOf(modoGoogleInicial) }
@@ -101,9 +109,10 @@ fun RegisterScreen(
 
     var telefono by remember { mutableStateOf("") }
     var fechaNacimiento by remember { mutableStateOf("") }
-    var region by remember { mutableStateOf("") }
+    var departamentos by remember { mutableStateOf<List<String>>(emptyList()) }
     var productosQueVende by remember { mutableStateOf("") }
-    var categoriasTexto by remember { mutableStateOf("") }
+    var categorias by remember { mutableStateOf<List<String>>(emptyList()) }
+    var categoriasOtro by remember { mutableStateOf("") }
 
     // =========================
     // CALENDARIO
@@ -136,6 +145,20 @@ fun RegisterScreen(
     val registerViewModel: RegisterViewModel = viewModel()
     val googleViewModel: GoogleSignInViewModel = viewModel()
     val context = LocalContext.current
+
+    // Errores del ViewModel: los de Firebase llegan como texto; los de validación como id de
+    // recurso, para mostrarlos en el idioma de la app.
+    val mostrarError: (String) -> Unit = { mensaje ->
+        Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+    }
+
+    val mostrarErrorRes: (Int) -> Unit = { recurso ->
+        Toast.makeText(context, context.getString(recurso), Toast.LENGTH_LONG).show()
+    }
+
+    val textoRegistrado = stringResource(R.string.registro_exitoso)
+    val textoSeleccionaFecha = stringResource(R.string.selecciona_fecha)
+    val textoFechaFutura = stringResource(R.string.fecha_nacimiento_futura)
 
     // =========================
     // SELECTOR DEL RUAC
@@ -178,7 +201,7 @@ fun RegisterScreen(
             ) {
 
                 Text(
-                    text = "Crea tu cuenta",
+                    text = stringResource(R.string.registro_titulo),
                     color = Marfil,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
@@ -189,8 +212,13 @@ fun RegisterScreen(
                 // El rol se eligió en la pantalla anterior: aquí solo se muestra cuál es,
                 // con la opción de volver para cambiarlo.
                 Text(
-                    text = "Te registras como " +
-                            if (rol == "artesano") "artesano" else "cliente",
+                    text = stringResource(
+                        if (rol == "artesano") {
+                            R.string.registro_como_artesano
+                        } else {
+                            R.string.registro_como_cliente
+                        }
+                    ),
                     color = Marfil.copy(alpha = 0.85f),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
@@ -207,14 +235,14 @@ fun RegisterScreen(
                     }
                 ) {
                     Text(
-                        text = "Cambiar rol",
+                        text = stringResource(R.string.cambiar_rol),
                         color = AzulClaro,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
 
                 Text(
-                    text = "* Campos obligatorios",
+                    text = stringResource(R.string.campos_obligatorios),
                     color = Marfil.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth()
@@ -228,7 +256,11 @@ fun RegisterScreen(
                     val (nombreGoogle, correoGoogle) = remember { registerViewModel.datosCuentaGoogle() }
 
                     Text(
-                        text = "Cuenta de Google: $nombreGoogle ($correoGoogle)",
+                        text = stringResource(
+                            R.string.cuenta_de_google,
+                            nombreGoogle,
+                            correoGoogle
+                        ),
                         color = Marfil.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth()
@@ -243,7 +275,7 @@ fun RegisterScreen(
                     GlassTextField(
                         value = nombre,
                         onValueChange = { nombre = it },
-                        label = "Nombre completo *",
+                        label = stringResource(R.string.campo_nombre_completo),
                         icon = Icons.Filled.Person,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -255,7 +287,7 @@ fun RegisterScreen(
                     GlassTextField(
                         value = correo,
                         onValueChange = { correo = it },
-                        label = "Correo electrónico *",
+                        label = stringResource(R.string.campo_correo_obligatorio),
                         icon = Icons.Filled.Email,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -270,7 +302,7 @@ fun RegisterScreen(
                     GlassTextField(
                         value = contraseña,
                         onValueChange = { contraseña = it },
-                        label = "Contraseña *",
+                        label = stringResource(R.string.campo_contrasena_obligatorio),
                         icon = Icons.Filled.Lock,
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (verContraseña) {
@@ -286,10 +318,19 @@ fun RegisterScreen(
                         }
                     )
 
+                    // Aviso de seguridad: es cierto — la contraseña la guarda Firebase
+                    // Authentication con hash y nunca se escribe en Firestore.
+                    Text(
+                        text = stringResource(R.string.contrasena_cifrada),
+                        color = Marfil.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     GlassTextField(
                         value = confirmarContraseña,
                         onValueChange = { confirmarContraseña = it },
-                        label = "Confirmar contraseña *",
+                        label = stringResource(R.string.campo_confirmar_contrasena),
                         icon = Icons.Filled.Lock,
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (verConfirmacion) {
@@ -315,7 +356,7 @@ fun RegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Información del artesano",
+                        text = stringResource(R.string.info_artesano),
                         color = Marfil,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
@@ -331,7 +372,7 @@ fun RegisterScreen(
                     GlassTextField(
                         value = telefono,
                         onValueChange = { telefono = it },
-                        label = "Número de teléfono *",
+                        label = stringResource(R.string.campo_telefono),
                         icon = Icons.Filled.Phone,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
@@ -344,7 +385,7 @@ fun RegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Fecha de nacimiento *",
+                        text = stringResource(R.string.campo_fecha_nacimiento),
                         color = Marfil.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth()
@@ -354,7 +395,7 @@ fun RegisterScreen(
 
                     OutlineButton(
                         text = if (fechaNacimiento.isBlank()) {
-                            "Seleccionar fecha de nacimiento"
+                            stringResource(R.string.seleccionar_fecha_nacimiento)
                         } else {
                             fechaNacimiento
                         },
@@ -384,7 +425,7 @@ fun RegisterScreen(
 
                                             Toast.makeText(
                                                 context,
-                                                "Selecciona una fecha",
+                                                textoSeleccionaFecha,
                                                 Toast.LENGTH_SHORT
                                             ).show()
 
@@ -394,7 +435,7 @@ fun RegisterScreen(
 
                                             Toast.makeText(
                                                 context,
-                                                "La fecha de nacimiento no puede ser futura",
+                                                textoFechaFutura,
                                                 Toast.LENGTH_LONG
                                             ).show()
 
@@ -416,7 +457,7 @@ fun RegisterScreen(
                                     }
                                 ) {
 
-                                    Text("Aceptar")
+                                    Text(stringResource(R.string.aceptar))
                                 }
                             },
                             dismissButton = {
@@ -427,7 +468,7 @@ fun RegisterScreen(
                                     }
                                 ) {
 
-                                    Text("Cancelar")
+                                    Text(stringResource(R.string.cancelar))
                                 }
                             }
                         ) {
@@ -439,16 +480,20 @@ fun RegisterScreen(
                     }
 
                     // =========================
-                    // REGIÓN
+                    // DEPARTAMENTOS (selección múltiple)
                     // =========================
 
-                    GlassTextField(
-                        value = region,
-                        onValueChange = { region = it },
-                        label = "Región (ej: Bogotá, Boyacá, La Guajira) *",
-                        icon = Icons.Filled.LocationOn,
-                        modifier = Modifier.fillMaxWidth()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    MinkaMultiSelectField(
+                        label = stringResource(R.string.campo_departamentos),
+                        opciones = CatalogosProducto.DEPARTAMENTOS,
+                        seleccionados = departamentos,
+                        onCambio = { departamentos = it },
+                        colorEtiqueta = Marfil.copy(alpha = 0.85f)
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // =========================
                     // PRODUCTOS QUE VENDE
@@ -457,7 +502,7 @@ fun RegisterScreen(
                     GlassTextField(
                         value = productosQueVende,
                         onValueChange = { productosQueVende = it },
-                        label = "¿Qué productos artesanales vendes? *",
+                        label = stringResource(R.string.campo_productos_que_vendes),
                         icon = Icons.Filled.ShoppingCart,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = false,
@@ -465,25 +510,32 @@ fun RegisterScreen(
                     )
 
                     // =========================
-                    // CATEGORÍAS
+                    // CATEGORÍAS (selección múltiple)
                     // =========================
 
-                    GlassTextField(
-                        value = categoriasTexto,
-                        onValueChange = { categoriasTexto = it },
-                        label = "Categorías artesanales (ej: Tejidos, cerámica, joyería) *",
-                        icon = Icons.Filled.Star,
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        minLines = 2
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    MinkaMultiSelectField(
+                        label = stringResource(R.string.campo_categorias_artesanales),
+                        opciones = CatalogosProducto.CATEGORIAS,
+                        seleccionados = categorias,
+                        onCambio = { categorias = it },
+                        colorEtiqueta = Marfil.copy(alpha = 0.85f),
+                        etiqueta = { etiquetaCategoria(it) }
                     )
 
-                    Text(
-                        text = "Separa las categorías con comas.",
-                        color = Marfil.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (CatalogosProducto.CATEGORIA_OTROS in categorias) {
+
+                        GlassTextField(
+                            value = categoriasOtro,
+                            onValueChange = { categoriasOtro = it },
+                            label = stringResource(R.string.campo_especifica_cual),
+                            icon = Icons.Filled.Person,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     // =========================
                     // RUAC
@@ -492,7 +544,7 @@ fun RegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "¿Tienes registro RUAC?",
+                        text = stringResource(R.string.tienes_ruac),
                         color = Marfil,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.fillMaxWidth()
@@ -512,7 +564,7 @@ fun RegisterScreen(
                             )
                         )
 
-                        Text("Sí", color = Marfil)
+                        Text(stringResource(R.string.si), color = Marfil)
                     }
 
                     Row(
@@ -534,7 +586,7 @@ fun RegisterScreen(
                             )
                         )
 
-                        Text("No", color = Marfil)
+                        Text(stringResource(R.string.no), color = Marfil)
                     }
 
                     // =========================
@@ -546,16 +598,16 @@ fun RegisterScreen(
                         GlassTextField(
                             value = numeroRuac,
                             onValueChange = { numeroRuac = it },
-                            label = "Número de registro RUAC *",
+                            label = stringResource(R.string.campo_numero_ruac),
                             icon = Icons.Filled.Person,
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         OutlineButton(
                             text = if (ruacUri == null) {
-                                "Adjuntar documento RUAC"
+                                stringResource(R.string.adjuntar_ruac)
                             } else {
-                                "Cambiar documento RUAC"
+                                stringResource(R.string.cambiar_ruac)
                             },
                             onClick = {
 
@@ -572,13 +624,29 @@ fun RegisterScreen(
                         if (ruacUri != null) {
 
                             Text(
-                                text = "Documento RUAC seleccionado correctamente",
+                                text = stringResource(R.string.ruac_seleccionado),
                                 color = Marfil.copy(alpha = 0.85f),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
+                }
+
+                // =========================
+                // TÉRMINOS Y CONDICIONES
+                // (también en modo Google: ahí todavía no se ha creado el documento)
+                // =========================
+
+                if (!registroCompletado) {
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    CheckboxTerminos(
+                        aceptado = aceptoTerminos,
+                        onCambio = { aceptoTerminos = it },
+                        onAbrirTerminos = { navController.navigate(Routes.TERMS) }
+                    )
                 }
 
                 // =========================
@@ -590,20 +658,17 @@ fun RegisterScreen(
                 if (modoGoogle) {
 
                     GradientButton(
-                        text = "Completar registro",
+                        text = stringResource(R.string.completar_registro),
                         onClick = {
 
-                            val categorias = categoriasTexto
-                                .split(",")
-                                .map { it.trim() }
-                                .filter { it.isNotBlank() }
-
                             registerViewModel.completarRegistroGoogle(
+                                aceptoTerminos = aceptoTerminos,
                                 telefono = telefono,
                                 fechaNacimiento = fechaNacimiento,
-                                region = region,
+                                departamentos = departamentos,
                                 productosQueVende = productosQueVende,
                                 categoriasArtesanales = categorias,
+                                categoriasArtesanalesOtro = categoriasOtro,
                                 tieneRuac = tieneRuac,
                                 numeroRuac = if (tieneRuac) numeroRuac else "",
                                 ruacUri = if (tieneRuac) ruacUri else null,
@@ -612,18 +677,19 @@ fun RegisterScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Has sido registrado correctamente",
+                                        textoRegistrado,
                                         Toast.LENGTH_LONG
                                     ).show()
+
+                                    SesionLocal.guardar("artesano", recordar = true)
 
                                     navController.navigate(Routes.HOME_ARTESANO) {
                                         popUpTo(Routes.WELCOME) { inclusive = true }
                                     }
                                 },
 
-                                onError = { mensaje ->
-                                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
-                                }
+                                onError = mostrarError,
+                                onErrorRes = mostrarErrorRes
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -634,7 +700,7 @@ fun RegisterScreen(
                     // Ya se confirmó el correo y se guardó el usuario:
                     // se muestra como confirmación, no es una acción más.
                     GradientButton(
-                        text = "✓ Has sido registrado correctamente",
+                        text = stringResource(R.string.registro_exitoso_boton),
                         onClick = {},
                         enabled = false,
                         modifier = Modifier.fillMaxWidth()
@@ -643,8 +709,7 @@ fun RegisterScreen(
                 } else if (correoEnviado) {
 
                     Text(
-                        text = "Te enviamos un código de 6 dígitos a tu correo. " +
-                                "Ingrésalo aquí abajo; expira en 10 minutos.",
+                        text = stringResource(R.string.codigo_enviado_info),
                         color = Marfil.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth()
@@ -660,7 +725,7 @@ fun RegisterScreen(
                                 .filter { it.isDigit() }
                                 .take(6)
                         },
-                        label = "Código de 6 dígitos",
+                        label = stringResource(R.string.campo_codigo),
                         icon = Icons.Filled.Lock,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.NumberPassword
@@ -671,7 +736,7 @@ fun RegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     GradientButton(
-                        text = "Verificar",
+                        text = stringResource(R.string.verificar),
                         onClick = {
 
                             registerViewModel.confirmarCodigoDeVerificacion(
@@ -683,19 +748,13 @@ fun RegisterScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Has sido registrado correctamente",
+                                        textoRegistrado,
                                         Toast.LENGTH_LONG
                                     ).show()
                                 },
 
-                                onError = { mensaje ->
-
-                                    Toast.makeText(
-                                        context,
-                                        mensaje,
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
+                                onError = mostrarError,
+                                onErrorRes = mostrarErrorRes
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -703,8 +762,10 @@ fun RegisterScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    val textoCodigoReenviado = stringResource(R.string.codigo_reenviado)
+
                     OutlineButton(
-                        text = "Reenviar código",
+                        text = stringResource(R.string.reenviar_codigo),
                         onClick = {
 
                             codigoVerificacion = ""
@@ -714,19 +775,13 @@ fun RegisterScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Código de verificación reenviado",
+                                        textoCodigoReenviado,
                                         Toast.LENGTH_LONG
                                     ).show()
                                 },
 
-                                onError = { mensaje ->
-
-                                    Toast.makeText(
-                                        context,
-                                        mensaje,
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
+                                onError = mostrarError,
+                                onErrorRes = mostrarErrorRes
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -734,14 +789,11 @@ fun RegisterScreen(
 
                 } else {
 
-                    GradientButton(
-                        text = "Enviar código de verificación",
-                        onClick = {
+                    val textoCodigoEnviado = stringResource(R.string.codigo_enviado_toast)
 
-                            val categorias = categoriasTexto
-                                .split(",")
-                                .map { it.trim() }
-                                .filter { it.isNotBlank() }
+                    GradientButton(
+                        text = stringResource(R.string.enviar_codigo),
+                        onClick = {
 
                             registerViewModel.iniciarRegistro(
 
@@ -750,6 +802,7 @@ fun RegisterScreen(
                                 contraseña = contraseña,
                                 confirmarContraseña = confirmarContraseña,
                                 rol = rol,
+                                aceptoTerminos = aceptoTerminos,
 
                                 telefono = if (rol == "artesano") telefono else "",
 
@@ -759,7 +812,11 @@ fun RegisterScreen(
                                     ""
                                 },
 
-                                region = if (rol == "artesano") region else "",
+                                departamentos = if (rol == "artesano") {
+                                    departamentos
+                                } else {
+                                    emptyList()
+                                },
 
                                 productosQueVende = if (rol == "artesano") {
                                     productosQueVende
@@ -771,6 +828,12 @@ fun RegisterScreen(
                                     categorias
                                 } else {
                                     emptyList()
+                                },
+
+                                categoriasArtesanalesOtro = if (rol == "artesano") {
+                                    categoriasOtro
+                                } else {
+                                    ""
                                 },
 
                                 tieneRuac = (rol == "artesano" && tieneRuac),
@@ -793,19 +856,13 @@ fun RegisterScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Te enviamos un código de verificación",
+                                        textoCodigoEnviado,
                                         Toast.LENGTH_LONG
                                     ).show()
                                 },
 
-                                onError = { mensaje ->
-
-                                    Toast.makeText(
-                                        context,
-                                        mensaje,
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
+                                onError = mostrarError,
+                                onErrorRes = mostrarErrorRes
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -817,7 +874,7 @@ fun RegisterScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlineButton(
-                        text = "Continuar con Google",
+                        text = stringResource(R.string.continuar_google),
                         onClick = {
 
                             googleViewModel.continuarConGoogle(
@@ -826,22 +883,22 @@ fun RegisterScreen(
                                 // Ya tenía cuenta: se enruta según su rol, como el login.
                                 onExistente = { rolExistente ->
 
-                                    val destino = when (rolExistente.trim().lowercase()) {
-                                        "cliente" -> Routes.HOME_CLIENTE
-                                        "artesano" -> Routes.HOME_ARTESANO
-                                        "administrador" -> Routes.ADMIN_RUAC_LIST
-                                        else -> null
-                                    }
+                                    val destino = Routes.homeDeRol(rolExistente)
 
                                     if (destino == null) {
 
                                         Toast.makeText(
                                             context,
-                                            "El rol del usuario no es válido: $rolExistente",
+                                            context.getString(
+                                                R.string.rol_no_valido,
+                                                rolExistente
+                                            ),
                                             Toast.LENGTH_LONG
                                         ).show()
 
                                     } else {
+
+                                        SesionLocal.guardar(rolExistente, recordar = true)
 
                                         navController.navigate(destino) {
                                             popUpTo(Routes.WELCOME) { inclusive = true }
@@ -855,13 +912,21 @@ fun RegisterScreen(
                                     if (rol == "cliente") {
 
                                         googleViewModel.crearClienteConGoogle(
+                                            aceptoTerminos = aceptoTerminos,
                                             onSuccess = {
+                                                SesionLocal.guardar("cliente", recordar = true)
                                                 navController.navigate(Routes.HOME_CLIENTE) {
                                                     popUpTo(Routes.WELCOME) { inclusive = true }
                                                 }
                                             },
-                                            onError = { mensaje ->
-                                                Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                                            onError = mostrarError,
+                                            onErrorRes = { recurso ->
+
+                                                // Quedó una sesión de Google sin documento: se
+                                                // cierra para no dejar a la persona "logueada"
+                                                // sin haber aceptado los términos.
+                                                googleViewModel.cancelarRegistroGoogle()
+                                                mostrarErrorRes(recurso)
                                             }
                                         )
 
@@ -872,9 +937,7 @@ fun RegisterScreen(
                                     }
                                 },
 
-                                onError = { mensaje ->
-                                    Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
-                                }
+                                onError = mostrarError
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -887,7 +950,7 @@ fun RegisterScreen(
                 // tercer botón de rol junto a Artesano/Cliente, solo un texto pequeño al
                 // final, como pide el encargo.
                 Text(
-                    text = "¿Eres administrador? Regístrate aquí",
+                    text = stringResource(R.string.eres_administrador),
                     color = Marfil.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.clickable {

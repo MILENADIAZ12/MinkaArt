@@ -42,6 +42,12 @@ data class Product(
     // Solo tiene valor cuando categoria == CatalogosProducto.CATEGORIA_OTROS ("Otros").
     val categoriaOtro: String? = null,
 
+    // Opcionales, alimentan el bottom sheet de filtros del catálogo del cliente. Valores de
+    // CatalogosProducto.COLORES / TAMANOS; "" en productos publicados antes de agregarlos
+    // (esos productos no aparecen al filtrar por color o tamaño, pero sí sin filtro).
+    val color: String = "",
+    val tamano: String = "",
+
     // Aquí se guardarán posteriormente las URL de Firebase Storage
     val imagenes: List<String> = emptyList(),
 

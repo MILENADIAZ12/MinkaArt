@@ -33,12 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BotonOjoContraseña
 import com.minkaart2.app.ui.components.GlassCard
@@ -46,6 +48,7 @@ import com.minkaart2.app.ui.components.GlassTextField
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.PatternBackground
+import com.minkaart2.app.util.SesionLocal
 import com.minkaart2.app.viewModel.GoogleSignInViewModel
 import com.minkaart2.app.viewModel.LoginViewModel
 
@@ -68,57 +71,36 @@ fun LoginScreen(
     val googleViewModel: GoogleSignInViewModel = viewModel()
     val context = LocalContext.current
 
+    val textoIngresaCorreo = stringResource(R.string.ingresa_correo_recuperar)
+    val textoCorreoRecuperacion = stringResource(R.string.correo_recuperacion_enviado)
+    val textoIngresaCredenciales = stringResource(R.string.ingresa_correo_y_contrasena)
+
     val irSegunRol: (String) -> Unit = { rol ->
 
-                when (rol.trim().lowercase()) {
+        // El administrador no tiene Home propio más allá de la lista de RUAC (Fase 5).
+        val destino = Routes.homeDeRol(rol)
 
-                    "cliente" -> {
+        if (destino != null) {
 
-                        navController.navigate(
-                            Routes.HOME_CLIENTE
-                        ) {
+            // Sesión persistente: el rol y "Recuérdame" quedan guardados para que
+            // SplashScreen salte directo al Home en el próximo arranque.
+            SesionLocal.guardar(rol, recuerdame)
 
-                            popUpTo(Routes.LOGIN) {
-                                inclusive = true
-                            }
-                        }
-                    }
+            navController.navigate(destino) {
 
-                    "artesano" -> {
-
-                        navController.navigate(
-                            Routes.HOME_ARTESANO
-                        ) {
-
-                            popUpTo(Routes.LOGIN) {
-                                inclusive = true
-                            }
-                        }
-                    }
-
-                    "administrador" -> {
-
-                        // El administrador no tiene Home propio más allá
-                        // de esto — solo aprueba/rechaza RUAC (Fase 5).
-                        navController.navigate(
-                            Routes.ADMIN_RUAC_LIST
-                        ) {
-
-                            popUpTo(Routes.LOGIN) {
-                                inclusive = true
-                            }
-                        }
-                    }
-
-                    else -> {
-
-                        Toast.makeText(
-                            context,
-                            "El rol del usuario no es válido: $rol",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
+                popUpTo(Routes.LOGIN) {
+                    inclusive = true
                 }
+            }
+
+        } else {
+
+            Toast.makeText(
+                context,
+                context.getString(R.string.rol_no_valido, rol),
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     PatternBackground(
@@ -157,7 +139,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Bienvenido de nuevo",
+                    text = stringResource(R.string.login_bienvenido),
                     color = Marfil,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
@@ -166,7 +148,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "Ingresa a tu cuenta Minka Art",
+                    text = stringResource(R.string.login_subtitulo),
                     color = Marfil.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -176,7 +158,7 @@ fun LoginScreen(
                 GlassTextField(
                     value = correo,
                     onValueChange = { correo = it },
-                    label = "Correo electrónico",
+                    label = stringResource(R.string.campo_correo),
                     icon = Icons.Filled.Email,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -184,7 +166,7 @@ fun LoginScreen(
                 GlassTextField(
                     value = contraseña,
                     onValueChange = { contraseña = it },
-                    label = "Contraseña",
+                    label = stringResource(R.string.campo_contrasena),
                     icon = Icons.Filled.Lock,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = if (verContraseña) {
@@ -221,7 +203,7 @@ fun LoginScreen(
                         )
                         Spacer(modifier = Modifier.height(0.dp))
                         Text(
-                            text = "Recuérdame",
+                            text = stringResource(R.string.recuerdame),
                             color = Marfil.copy(alpha = 0.85f),
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -234,7 +216,7 @@ fun LoginScreen(
 
                                 Toast.makeText(
                                     context,
-                                    "Ingresa tu correo para recuperar la contraseña",
+                                    textoIngresaCorreo,
                                     Toast.LENGTH_SHORT
                                 ).show()
 
@@ -248,7 +230,7 @@ fun LoginScreen(
 
                                     Toast.makeText(
                                         context,
-                                        "Correo de recuperación enviado",
+                                        textoCorreoRecuperacion,
                                         Toast.LENGTH_LONG
                                     ).show()
                                 },
@@ -265,7 +247,7 @@ fun LoginScreen(
                         }
                     ) {
                         Text(
-                            text = "¿Olvidaste tu contraseña?",
+                            text = stringResource(R.string.olvidaste_contrasena),
                             color = Marfil.copy(alpha = 0.85f),
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -275,14 +257,14 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 GradientButton(
-                    text = "INICIAR SESIÓN",
+                    text = stringResource(R.string.iniciar_sesion_mayus),
                     onClick = {
 
                         if (correo.isBlank() || contraseña.isBlank()) {
 
                             Toast.makeText(
                                 context,
-                                "Ingresa correo y contraseña",
+                                textoIngresaCredenciales,
                                 Toast.LENGTH_SHORT
                             ).show()
 
@@ -311,7 +293,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlineButton(
-                    text = "Continuar con Google",
+                    text = stringResource(R.string.continuar_google),
                     onClick = {
 
                         googleViewModel.continuarConGoogle(
@@ -341,12 +323,12 @@ fun LoginScreen(
 
                 Row {
                     Text(
-                        text = "¿No tienes cuenta? ",
+                        text = stringResource(R.string.no_tienes_cuenta),
                         color = Marfil.copy(alpha = 0.75f),
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
-                        text = "Regístrate",
+                        text = stringResource(R.string.registrate),
                         color = Marfil,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,

@@ -61,6 +61,7 @@ import com.minkaart2.app.ui.components.BottomNavItemData
 import com.minkaart2.app.ui.components.EfectoNotificaciones
 import com.minkaart2.app.ui.components.GradientButton
 import com.minkaart2.app.ui.components.IconoNotificaciones
+import com.minkaart2.app.ui.components.LogoMinkaEncabezado
 import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.repository.VisualSearchRepository
 import com.minkaart2.app.ui.components.RolePillToggle
@@ -182,24 +183,7 @@ fun HomeArtesanoScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-
-                Box(
-                    modifier = Modifier
-                        .height(28.dp)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Guinda)
-                )
-
-                Text(
-                    text = "Minka Art",
-                    color = Guinda,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 10.dp)
-                )
-            }
+            LogoMinkaEncabezado(colorEslogan = Guinda)
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -211,25 +195,11 @@ fun HomeArtesanoScreen(
                     onClick = { navController.navigate(Routes.NOTIFICATIONS) }
                 )
 
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(AzulClaro)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onPerfilClick
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = "Mi perfil",
-                        tint = Guinda,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                com.minkaart2.app.ui.components.IconoAccion(
+                    icono = Icons.Filled.Person,
+                    descripcion = "Mi perfil",
+                    onClick = onPerfilClick
+                )
             }
         }
 

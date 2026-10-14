@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -11,13 +12,74 @@ import { GoogleAuth } from "google-auth-library";
 initializeApp();
 const db = getFirestore();
 
-// Se configuran una sola vez con:
-// firebase functions:secrets:set GMAIL_USER
-// firebase functions:secrets:set GMAIL_APP_PASSWORD
-// GMAIL_APP_PASSWORD es una contraseña de aplicación de Google
-// (https://myaccount.google.com/apppasswords), no la contraseña normal de la cuenta.
+// Se configura una sola vez con:
+// firebase functions:secrets:set RESEND_API_KEY
+// (la API key de https://resend.com/api-keys, empieza por "re_"). Nunca va en el código.
+const resendKey = defineSecret("RESEND_API_KEY");
+
+// Remitente. Resend NO permite enviar desde direcciones @gmail.com: el "from" tiene que ser
+// un dominio verificado en Resend. Mientras no haya dominio propio se usa el remitente de
+// pruebas de Resend (onboarding@resend.dev), que SOLO entrega al correo con el que se
+// registró la cuenta de Resend. Cuando se verifique un dominio, cambiar REMITENTE por
+// p. ej. "MinkaArt <no-responder@tudominio.com>".
+const REMITENTE = "MinkaArt <onboarding@resend.dev>";
+
+// Las respuestas de los usuarios llegan a esta cuenta de Gmail.
+const RESPONDER_A = "minka.art.app@gmail.com";
+
+async function enviarConResend(para: string, asunto: string, html: string): Promise<void> {
+  const respuesta = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey.value()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: REMITENTE,
+      to: [para],
+      reply_to: RESPONDER_A,
+      subject: asunto,
+      html,
+    }),
+  });
+
+  if (!respuesta.ok) {
+    throw new Error(`Resend respondió ${respuesta.status}: ${await respuesta.text()}`);
+  }
+}
+
+// Proveedor de correo. "gmail" (SMTP de Gmail con contraseña de aplicación) entrega a cualquier
+// destinatario, con un límite de ~500 correos/día. "resend" solo entrega a cualquier
+// destinatario cuando hay un dominio verificado en Resend; sin él, solo al correo de la
+// cuenta de Resend. Cambiar a "resend" cuando exista el dominio (y ajustar REMITENTE).
+// Secretos de Gmail: firebase functions:secrets:set GMAIL_USER / GMAIL_APP_PASSWORD
+// (GMAIL_USER = minka.art.app@gmail.com; la contraseña es de aplicación, no la normal).
+const PROVEEDOR_CORREO: "gmail" | "resend" = "gmail";
 const gmailUser = defineSecret("GMAIL_USER");
 const gmailPassword = defineSecret("GMAIL_APP_PASSWORD");
+const SECRETOS_CORREO = [gmailUser, gmailPassword, resendKey];
+
+async function enviarCorreo(para: string, asunto: string, html: string): Promise<void> {
+  if (PROVEEDOR_CORREO === "resend") {
+    await enviarConResend(para, asunto, html);
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: gmailUser.value(), pass: gmailPassword.value() },
+  });
+
+  await transporter.sendMail({
+    from: `MinkaArt <${gmailUser.value()}>`,
+    to: para,
+    replyTo: RESPONDER_A,
+    subject: asunto,
+    html,
+  });
+}
 
 const COLECCION = "codigosVerificacion";
 const EXPIRACION_MINUTOS = 10;
@@ -43,20 +105,24 @@ function plantillaCorreo(codigo: string): string {
   `;
 }
 
+function plantillaCambioContrasena(enlace: string): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #722F37;">MinkaArt</h2>
+      <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta.</p>
+      <p><a href="${enlace}" style="display: inline-block; background: #66172E; color: #F2EDE6; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: bold;">Cambiar mi contraseña</a></p>
+      <p style="color: #888; font-size: 12px;">Si no pediste este cambio, ignora este correo: tu contraseña no se modificará.</p>
+    </div>
+  `;
+}
+
 /**
- * Genera un código de 6 dígitos, lo envía por correo (SMTP de Gmail, vía nodemailer)
- * y solo si el envío fue exitoso lo guarda en Firestore.
+ * Genera un código de 6 dígitos, lo envía por correo (API de Resend) y solo si el envío
+ * fue exitoso lo guarda en Firestore.
  * Se llama desde la app antes de crear la cuenta de Firebase Auth.
- *
- * El remitente es una cuenta de Gmail (con contraseña de aplicación), no un dominio
- * verificado en un proveedor transaccional: llega a cualquier destinatario sin trámite
- * de DNS, con un límite de envío de Gmail de aproximadamente 500 correos/día. Si más
- * adelante se necesita un remitente con dominio propio y sin ese límite, hay que
- * verificar un dominio en un proveedor transaccional (p. ej. Resend) y sustituir aquí
- * el bloque de envío por ese proveedor.
  */
 export const enviarCodigoVerificacion = onCall(
-  { secrets: [gmailUser, gmailPassword], invoker: "public" },
+  { secrets: SECRETOS_CORREO, invoker: "public" },
   async (request) => {
     const correo = request.data?.correo;
 
@@ -67,23 +133,8 @@ export const enviarCodigoVerificacion = onCall(
     const codigo = generarCodigo();
     const expiracion = Timestamp.fromMillis(Date.now() + EXPIRACION_MINUTOS * 60 * 1000);
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: gmailUser.value(),
-        pass: gmailPassword.value(),
-      },
-    });
-
     try {
-      await transporter.sendMail({
-        from: `MinkaArt <${gmailUser.value()}>`,
-        to: correo,
-        subject: "Tu código de verificación - MinkaArt",
-        html: plantillaCorreo(codigo),
-      });
+      await enviarCorreo(correo, "Tu código de verificación - MinkaArt", plantillaCorreo(codigo));
     } catch (error) {
       logger.error("Fallo al enviar el código de verificación", error);
       throw new HttpsError("internal", "No se pudo enviar el correo. Intenta de nuevo.");
@@ -95,6 +146,62 @@ export const enviarCodigoVerificacion = onCall(
       intentos: 0,
       creado: FieldValue.serverTimestamp(),
     });
+
+    return { enviado: true };
+  }
+);
+
+const COLECCION_LIMITES_RECUPERACION = "limitesRecuperacion";
+const ESPERA_RECUPERACION_SEGUNDOS = 60;
+
+/**
+ * Envía en español, por Resend, el enlace para cambiar la contraseña (reemplaza a
+ * sendPasswordResetEmail de Firebase, cuyo correo salía en inglés y caía en spam).
+ * El enlace lo genera Firebase Auth (Admin SDK) y abre su página de restablecimiento en
+ * español. No revela si el correo existe: responde igual en ambos casos. Limita a un envío
+ * por correo cada ESPERA_RECUPERACION_SEGUNDOS.
+ */
+export const enviarEnlaceCambioContrasena = onCall(
+  { secrets: SECRETOS_CORREO, invoker: "public" },
+  async (request) => {
+    const correo = request.data?.correo;
+
+    if (!esCorreoValido(correo)) {
+      throw new HttpsError("invalid-argument", "El correo no es válido.");
+    }
+
+    const limiteRef = db.collection(COLECCION_LIMITES_RECUPERACION).doc(correo);
+    const limiteSnap = await limiteRef.get();
+    const ultimo = limiteSnap.get("ultimoEnvio") as Timestamp | undefined;
+
+    if (ultimo && Date.now() - ultimo.toMillis() < ESPERA_RECUPERACION_SEGUNDOS * 1000) {
+      throw new HttpsError("resource-exhausted", "Espera un minuto antes de pedir otro correo.");
+    }
+
+    let enlace: string;
+
+    try {
+      enlace = await getAuth().generatePasswordResetLink(correo);
+    } catch (error) {
+      // Sin cuenta con ese correo: no se envía nada, pero tampoco se avisa a quien pregunta.
+      logger.info("Cambio de contraseña pedido para un correo sin cuenta");
+      return { enviado: true };
+    }
+
+    const enlaceEspanol = enlace + (enlace.includes("?") ? "&" : "?") + "lang=es";
+
+    try {
+      await enviarCorreo(
+        correo,
+        "Cambia tu contraseña - MinkaArt",
+        plantillaCambioContrasena(enlaceEspanol)
+      );
+    } catch (error) {
+      logger.error("Fallo al enviar el enlace de cambio de contraseña", error);
+      throw new HttpsError("internal", "No se pudo enviar el correo. Intenta de nuevo.");
+    }
+
+    await limiteRef.set({ ultimoEnvio: Timestamp.now() });
 
     return { enviado: true };
   }

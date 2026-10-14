@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -61,9 +62,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BarraValoracion
 import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.util.etiquetaCategoria
 import com.minkaart2.app.viewModel.ProductDetailViewModel
 import java.net.URLEncoder
 
@@ -204,7 +207,7 @@ fun ProductDetailScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver",
+                            contentDescription = stringResource(R.string.volver),
                             tint = Guinda,
                             modifier = Modifier.size(14.dp)
                         )
@@ -234,7 +237,7 @@ fun ProductDetailScreen(
                     ) {
                         Icon(
                             imageVector = if (yaLeDioLike) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = "Me gusta",
+                            contentDescription = stringResource(R.string.me_gusta),
                             tint = Borgona,
                             modifier = Modifier.size(14.dp)
                         )
@@ -276,7 +279,7 @@ fun ProductDetailScreen(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = productoActual.categoria,
+                                text = etiquetaCategoria(productoActual.categoria),
                                 color = AzulAcero,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
@@ -286,9 +289,9 @@ fun ProductDetailScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
-                    SeccionTexto(titulo = "Descripción", texto = productoActual.descripcion)
-                    SeccionTexto(titulo = "Historia y proceso", texto = productoActual.historiaProceso)
-                    SeccionTexto(titulo = "Región de origen", texto = productoActual.regionOrigen)
+                    SeccionTexto(titulo = stringResource(R.string.detalle_descripcion), texto = productoActual.descripcion)
+                    SeccionTexto(titulo = stringResource(R.string.detalle_historia), texto = productoActual.historiaProceso)
+                    SeccionTexto(titulo = stringResource(R.string.detalle_region), texto = productoActual.regionOrigen)
 
                     // Fila del artesano — el contacto público (editable por el propio
                     // artesano desde su perfil) tiene prioridad; si no lo configuró, se
@@ -325,12 +328,31 @@ fun ProductDetailScreen(
                                 .background(Color(0xFFB7C7D9)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = Guinda,
-                                modifier = Modifier.size(16.dp)
-                            )
+
+                            // Foto de perfil del artesano (recorte circular); si no subió
+                            // ninguna, se queda el ícono por defecto.
+                            val fotoArtesano = datosArtesano?.fotoUrl
+
+                            if (!fotoArtesano.isNullOrBlank()) {
+
+                                AsyncImage(
+                                    model = fotoArtesano,
+                                    contentDescription = datosArtesano.nombre,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                )
+
+                            } else {
+
+                                Icon(
+                                    imageVector = Icons.Filled.Person,
+                                    contentDescription = null,
+                                    tint = Guinda,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
 
                         Column(
@@ -340,7 +362,7 @@ fun ProductDetailScreen(
                         ) {
 
                             Text(
-                                text = datosArtesano?.nombre ?: "Artesano",
+                                text = datosArtesano?.nombre ?: stringResource(R.string.modo_artesano),
                                 color = Guinda,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
@@ -366,7 +388,7 @@ fun ProductDetailScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = "Con registro RUAC",
+                                    contentDescription = stringResource(R.string.con_registro_ruac),
                                     tint = Color(0xFFA8770F),
                                     modifier = Modifier.size(12.dp)
                                 )
@@ -390,7 +412,7 @@ fun ProductDetailScreen(
                     ) {
 
                         BarraValoracion(
-                            etiqueta = "Calidad",
+                            etiqueta = stringResource(R.string.calidad),
                             promedio = productoActual.calidadPromedio,
                             conteo = productoActual.calidadConteo
                         )
@@ -399,7 +421,7 @@ fun ProductDetailScreen(
                         // error de fases anteriores) — se lee de statsArtesano en vez de
                         // productoActual.confianzaPromedio (campo que ya no existe).
                         BarraValoracion(
-                            etiqueta = "Confianza",
+                            etiqueta = stringResource(R.string.confianza),
                             promedio = statsArtesano.confianzaPromedio,
                             conteo = statsArtesano.confianzaConteo
                         )
@@ -408,7 +430,7 @@ fun ProductDetailScreen(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     GradientButton(
-                        text = "Contactar artesano",
+                        text = stringResource(R.string.contactar_artesano),
                         onClick = {
 
                             viewModel.obtenerDatosDelContacto { nombreCliente, correoCliente ->
@@ -508,7 +530,7 @@ private fun VisorImagenesDialog(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Cerrar",
+                    contentDescription = stringResource(R.string.cerrar),
                     tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )
@@ -611,7 +633,7 @@ private fun contactarPorWhatsApp(
     if (telefono.isBlank()) {
         Toast.makeText(
             context,
-            "Este artesano no tiene un teléfono de contacto registrado",
+            context.getString(R.string.sin_telefono_artesano),
             Toast.LENGTH_LONG
         ).show()
         return
@@ -652,7 +674,7 @@ private fun contactarPorWhatsApp(
 
             Toast.makeText(
                 context,
-                "No se pudo abrir WhatsApp ni el marcador de llamadas",
+                context.getString(R.string.no_se_pudo_abrir_whatsapp),
                 Toast.LENGTH_LONG
             ).show()
         }

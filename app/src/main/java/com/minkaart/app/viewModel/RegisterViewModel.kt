@@ -6,6 +6,9 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.minkaart2.app.R
+import com.minkaart2.app.data.CatalogosProducto
+import com.minkaart2.app.data.VERSION_TERMINOS
 import com.minkaart2.app.data.model.User
 import com.minkaart2.app.repository.AuthRepository
 
@@ -29,9 +32,10 @@ class RegisterViewModel : ViewModel() {
         val rol: String,
         val telefono: String,
         val fechaNacimiento: String,
-        val region: String,
+        val departamentos: List<String>,
         val productosQueVende: String,
         val categoriasArtesanales: List<String>,
+        val categoriasArtesanalesOtro: String?,
         val tieneRuac: Boolean,
         val numeroRuac: String,
         val ruacUri: Uri?
@@ -41,6 +45,9 @@ class RegisterViewModel : ViewModel() {
 
     // =========================
     // PASO 1: VALIDAR Y ENVIAR CÓDIGO DE VERIFICACIÓN
+    // Los errores de validación se reportan con un id de recurso (onErrorRes) para que la
+    // pantalla los muestre en el idioma de la app, sin guardar un Context aquí; los errores
+    // que vienen de Firebase/Cloud Functions siguen llegando como texto por onError.
     // =========================
 
     fun iniciarRegistro(
@@ -49,16 +56,19 @@ class RegisterViewModel : ViewModel() {
         contraseña: String,
         confirmarContraseña: String,
         rol: String,
+        aceptoTerminos: Boolean,
         telefono: String = "",
         fechaNacimiento: String = "",
-        region: String = "",
+        departamentos: List<String> = emptyList(),
         productosQueVende: String = "",
         categoriasArtesanales: List<String> = emptyList(),
+        categoriasArtesanalesOtro: String = "",
         tieneRuac: Boolean = false,
         numeroRuac: String = "",
         ruacUri: Uri? = null,
         onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onErrorRes: (Int) -> Unit
     ) {
 
         // =========================
@@ -66,22 +76,27 @@ class RegisterViewModel : ViewModel() {
         // =========================
 
         if (nombre.isBlank()) {
-            onError("Ingresa tu nombre")
+            onErrorRes(R.string.err_ingresa_nombre)
             return
         }
 
         if (correo.isBlank()) {
-            onError("Ingresa tu correo electrónico")
+            onErrorRes(R.string.err_ingresa_correo)
             return
         }
 
         if (contraseña.length < 6) {
-            onError("La contraseña debe tener mínimo 6 caracteres")
+            onErrorRes(R.string.err_contrasena_corta)
             return
         }
 
         if (contraseña != confirmarContraseña) {
-            onError("Las contraseñas no coinciden")
+            onErrorRes(R.string.err_contrasenas_no_coinciden)
+            return
+        }
+
+        if (!aceptoTerminos) {
+            onErrorRes(R.string.err_acepta_terminos)
             return
         }
 
@@ -94,16 +109,17 @@ class RegisterViewModel : ViewModel() {
             val errorArtesano = validarDatosArtesano(
                 telefono = telefono,
                 fechaNacimiento = fechaNacimiento,
-                region = region,
+                departamentos = departamentos,
                 productosQueVende = productosQueVende,
                 categoriasArtesanales = categoriasArtesanales,
+                categoriasArtesanalesOtro = categoriasArtesanalesOtro,
                 tieneRuac = tieneRuac,
                 numeroRuac = numeroRuac,
                 ruacUri = ruacUri
             )
 
             if (errorArtesano != null) {
-                onError(errorArtesano)
+                onErrorRes(errorArtesano)
                 return
             }
         }
@@ -125,9 +141,10 @@ class RegisterViewModel : ViewModel() {
                     rol = rol,
                     telefono = telefono,
                     fechaNacimiento = fechaNacimiento,
-                    region = region,
+                    departamentos = departamentos,
                     productosQueVende = productosQueVende,
                     categoriasArtesanales = categoriasArtesanales,
+                    categoriasArtesanalesOtro = categoriasArtesanalesOtro,
                     tieneRuac = tieneRuac,
                     numeroRuac = numeroRuac,
                     ruacUri = ruacUri
@@ -143,38 +160,56 @@ class RegisterViewModel : ViewModel() {
     // =========================
     // VALIDACIÓN DE LOS DATOS OBLIGATORIOS DEL ARTESANO
     // (compartida por el registro con correo y por el registro con Google)
+    // Devuelve el id del mensaje de error, o null si todo está bien.
     // =========================
 
     private fun validarDatosArtesano(
         telefono: String,
         fechaNacimiento: String,
-        region: String,
+        departamentos: List<String>,
         productosQueVende: String,
         categoriasArtesanales: List<String>,
+        categoriasArtesanalesOtro: String,
         tieneRuac: Boolean,
         numeroRuac: String,
         ruacUri: Uri?
-    ): String? {
+    ): Int? {
 
-        if (telefono.isBlank()) return "Ingresa tu número de teléfono"
+        if (telefono.isBlank()) return R.string.err_telefono
 
-        if (fechaNacimiento.isBlank()) return "Selecciona tu fecha de nacimiento"
+        if (fechaNacimiento.isBlank()) return R.string.err_fecha_nacimiento
 
-        if (region.isBlank()) return "Ingresa tu región"
+        if (departamentos.isEmpty()) return R.string.err_departamentos
 
-        if (productosQueVende.isBlank()) return "Indica qué productos artesanales vendes"
+        if (productosQueVende.isBlank()) return R.string.err_productos_que_vende
 
-        if (categoriasArtesanales.isEmpty()) return "Ingresa al menos una categoría artesanal"
+        if (categoriasArtesanales.isEmpty()) return R.string.err_categorias_artesanales
+
+        if (
+            CatalogosProducto.CATEGORIA_OTROS in categoriasArtesanales &&
+            categoriasArtesanalesOtro.isBlank()
+        ) {
+            return R.string.err_categoria_otros
+        }
 
         if (tieneRuac) {
 
-            if (numeroRuac.isBlank()) return "Ingresa el número de registro RUAC"
+            if (numeroRuac.isBlank()) return R.string.err_ruac_numero
 
-            if (ruacUri == null) return "Debes adjuntar tu documento RUAC"
+            if (ruacUri == null) return R.string.err_ruac_documento
         }
 
         return null
     }
+
+    // "Especifica cuál" solo tiene sentido junto a la opción "Otros": se descarta cualquier
+    // texto que haya quedado de una selección anterior (mismo criterio que
+    // Product.categoriaOtro).
+    private fun categoriasOtroFinal(
+        categorias: List<String>,
+        otro: String
+    ): String? =
+        if (CatalogosProducto.CATEGORIA_OTROS in categorias) otro.trim() else null
 
     /** Nombre y correo de la cuenta de Google ya autenticada. */
     fun datosCuentaGoogle(): Pair<String, String> = authRepository.datosCuentaActual()
@@ -186,38 +221,47 @@ class RegisterViewModel : ViewModel() {
     // =========================
 
     fun completarRegistroGoogle(
+        aceptoTerminos: Boolean,
         telefono: String,
         fechaNacimiento: String,
-        region: String,
+        departamentos: List<String>,
         productosQueVende: String,
         categoriasArtesanales: List<String>,
+        categoriasArtesanalesOtro: String,
         tieneRuac: Boolean,
         numeroRuac: String,
         ruacUri: Uri?,
         onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onErrorRes: (Int) -> Unit
     ) {
 
         val usuario = auth.currentUser
 
         if (usuario == null) {
-            onError("No se pudo obtener el usuario autenticado")
+            onErrorRes(R.string.err_usuario_no_autenticado)
+            return
+        }
+
+        if (!aceptoTerminos) {
+            onErrorRes(R.string.err_acepta_terminos)
             return
         }
 
         val errorArtesano = validarDatosArtesano(
             telefono = telefono,
             fechaNacimiento = fechaNacimiento,
-            region = region,
+            departamentos = departamentos,
             productosQueVende = productosQueVende,
             categoriasArtesanales = categoriasArtesanales,
+            categoriasArtesanalesOtro = categoriasArtesanalesOtro,
             tieneRuac = tieneRuac,
             numeroRuac = numeroRuac,
             ruacUri = ruacUri
         )
 
         if (errorArtesano != null) {
-            onError(errorArtesano)
+            onErrorRes(errorArtesano)
             return
         }
 
@@ -228,9 +272,13 @@ class RegisterViewModel : ViewModel() {
             rol = "artesano",
             telefono = telefono,
             fechaNacimiento = fechaNacimiento,
-            region = region,
+            departamentos = departamentos,
             productosQueVende = productosQueVende,
             categoriasArtesanales = categoriasArtesanales,
+            categoriasArtesanalesOtro = categoriasOtroFinal(
+                categoriasArtesanales,
+                categoriasArtesanalesOtro
+            ),
             tieneRuac = tieneRuac,
             numeroRuac = numeroRuac,
             ruacUri = if (tieneRuac) ruacUri else null
@@ -280,9 +328,10 @@ class RegisterViewModel : ViewModel() {
         rol: String,
         telefono: String,
         fechaNacimiento: String,
-        region: String,
+        departamentos: List<String>,
         productosQueVende: String,
         categoriasArtesanales: List<String>,
+        categoriasArtesanalesOtro: String,
         tieneRuac: Boolean,
         numeroRuac: String,
         ruacUri: Uri?
@@ -299,7 +348,7 @@ class RegisterViewModel : ViewModel() {
             } else {
                 ""
             },
-            region = if (rol == "artesano") region else "",
+            departamentos = if (rol == "artesano") departamentos else emptyList(),
             productosQueVende = if (rol == "artesano") {
                 productosQueVende
             } else {
@@ -309,6 +358,11 @@ class RegisterViewModel : ViewModel() {
                 categoriasArtesanales
             } else {
                 emptyList()
+            },
+            categoriasArtesanalesOtro = if (rol == "artesano") {
+                categoriasOtroFinal(categoriasArtesanales, categoriasArtesanalesOtro)
+            } else {
+                null
             },
             tieneRuac = rol == "artesano" && tieneRuac,
             numeroRuac = if (rol == "artesano" && tieneRuac) numeroRuac else "",
@@ -324,18 +378,19 @@ class RegisterViewModel : ViewModel() {
     fun confirmarCodigoDeVerificacion(
         codigoIngresado: String,
         onVerificado: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onErrorRes: (Int) -> Unit
     ) {
 
         val datos = datosPendientes
 
         if (datos == null) {
-            onError("No hay un registro pendiente de confirmar")
+            onErrorRes(R.string.err_sin_registro_pendiente)
             return
         }
 
         if (codigoIngresado.isBlank()) {
-            onError("Ingresa el código de 6 dígitos que recibiste por correo")
+            onErrorRes(R.string.err_codigo_vacio)
             return
         }
 
@@ -504,13 +559,19 @@ class RegisterViewModel : ViewModel() {
             rol = datos.rol,
             telefono = datos.telefono,
             fechaNacimiento = datos.fechaNacimiento,
-            region = datos.region,
+            // `region` (heredado) ya no se escribe: reemplazado por `departamentos`.
+            departamentos = datos.departamentos,
             productosQueVende = datos.productosQueVende,
             categoriasArtesanales = datos.categoriasArtesanales,
+            categoriasArtesanalesOtro = datos.categoriasArtesanalesOtro,
             ruacEstado = if (datos.tieneRuac) "pendiente" else "no_solicitado",
             ruacRegistro = if (datos.tieneRuac) datos.numeroRuac else null,
             ruacDocumentoUrl = if (datos.tieneRuac) ruacUrl else null,
-            ruacSolicitadoEn = if (datos.tieneRuac) Timestamp.now() else null
+            ruacSolicitadoEn = if (datos.tieneRuac) Timestamp.now() else null,
+            // Solo se llega aquí si el formulario se validó con los términos aceptados.
+            aceptoTerminos = true,
+            terminosAceptadosEn = Timestamp.now(),
+            versionTerminos = VERSION_TERMINOS
         )
 
         db.collection("usuarios")
@@ -535,13 +596,14 @@ class RegisterViewModel : ViewModel() {
 
     fun reenviarCodigoDeVerificacion(
         onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onErrorRes: (Int) -> Unit
     ) {
 
         val datos = datosPendientes
 
         if (datos == null) {
-            onError("No hay un registro pendiente de confirmar")
+            onErrorRes(R.string.err_sin_registro_pendiente)
             return
         }
 

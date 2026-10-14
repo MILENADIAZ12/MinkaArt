@@ -1,6 +1,8 @@
 package com.minkaart2.app.ui.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
@@ -18,8 +20,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.minkaart2.app.R
 
 private val Guinda = Color(0xFF3B0F1A)
 private val Borgona = Color(0xFF66172E)
@@ -40,7 +44,10 @@ fun MinkaDropdownField(
     valorSeleccionado: String,
     onSeleccionar: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Selecciona una opción"
+    placeholder: String = stringResource(R.string.selecciona_opcion),
+    // Texto mostrado para cada valor: lo guardado en Firestore sigue siendo el valor en
+    // español de `opciones`, esto solo lo traduce en pantalla (ver util/Etiquetas.kt).
+    etiqueta: @Composable (String) -> String = { it }
 ) {
     var expandido by remember { mutableStateOf(false) }
 
@@ -53,13 +60,15 @@ fun MinkaDropdownField(
             fontWeight = FontWeight.Bold
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+
         ExposedDropdownMenuBox(
             expanded = expandido,
             onExpandedChange = { expandido = it }
         ) {
 
             TextField(
-                value = valorSeleccionado,
+                value = if (valorSeleccionado.isEmpty()) "" else etiqueta(valorSeleccionado),
                 onValueChange = {},
                 readOnly = true,
                 placeholder = { Text(placeholder, color = Guinda.copy(alpha = 0.35f)) },
@@ -91,7 +100,7 @@ fun MinkaDropdownField(
                 opciones.forEach { opcion ->
 
                     DropdownMenuItem(
-                        text = { Text(opcion) },
+                        text = { Text(etiqueta(opcion)) },
                         onClick = {
                             onSeleccionar(opcion)
                             expandido = false

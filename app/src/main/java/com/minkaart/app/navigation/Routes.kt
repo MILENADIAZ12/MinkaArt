@@ -18,9 +18,25 @@ object Routes {
 
     fun roleSelectionRoute(google: Boolean = false) = "role_selection?google=$google"
 
+    // Términos y Condiciones / Política de Tratamiento de Datos Personales. Se abre desde
+    // el enlace de la casilla de aceptación de los registros.
+    const val TERMS = "terms"
+
     const val HOME_CLIENTE = "home_cliente"
 
     const val HOME_ARTESANO = "home_artesano"
+
+    /**
+     * Home que le corresponde a un [rol] guardado en `usuarios/{uid}.rol` — lo usan
+     * `LoginScreen` (tras iniciar sesión) y `SplashViewModel` (sesión persistente).
+     * `null` si el rol no se reconoce.
+     */
+    fun homeDeRol(rol: String): String? = when (rol.trim().lowercase()) {
+        "cliente" -> HOME_CLIENTE
+        "artesano" -> HOME_ARTESANO
+        "administrador" -> ADMIN_RUAC_LIST
+        else -> null
+    }
 
     const val PROFILE = "profile"
 
@@ -51,6 +67,9 @@ object Routes {
     const val PURCHASE_HISTORY = "purchase_history"
 
     const val ACCOUNT_SETTINGS = "account_settings"
+
+    // Editar información básica (nombre, teléfono, ciudad/región, foto) — cliente y artesano.
+    const val EDIT_PROFILE = "edit_profile"
 
     const val RECOGNITION = "recognition"
 

@@ -128,6 +128,8 @@ class ProductViewModel : ViewModel() {
         categoria: String,
         categoriaOtro: String,
         clasificacion: String?,
+        color: String,
+        tamano: String,
         imagenesUris: List<Uri>,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
@@ -187,7 +189,9 @@ class ProductViewModel : ViewModel() {
             municipio = municipio,
             categoria = categoria.trim(),
             categoriaOtro = categoriaOtroFinal,
-            clasificacion = clasificacion
+            clasificacion = clasificacion,
+            color = color,
+            tamano = tamano
         )
 
         productRepository.guardarProductoConImagenes(
@@ -250,6 +254,8 @@ class ProductViewModel : ViewModel() {
         categoria: String,
         categoriaOtro: String,
         clasificacion: String?,
+        color: String,
+        tamano: String,
         imagenesExistentes: List<String>,
         imagenesNuevasUris: List<Uri>,
         onSuccess: () -> Unit,
@@ -313,7 +319,9 @@ class ProductViewModel : ViewModel() {
             municipio = municipio,
             categoria = categoria.trim(),
             categoriaOtro = categoriaOtroFinal,
-            clasificacion = clasificacion
+            clasificacion = clasificacion,
+            color = color,
+            tamano = tamano
         )
 
         productRepository.actualizarProducto(

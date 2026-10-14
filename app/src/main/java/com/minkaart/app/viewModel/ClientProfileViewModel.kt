@@ -64,6 +64,75 @@ class ClientProfileViewModel : ViewModel() {
         )
     }
 
+    /**
+     * Guarda nombre, teléfono y ciudad/región del propio usuario (pantalla "Editar
+     * información básica", la misma para cliente y artesano). La validación vive aquí.
+     * La ciudad/región se guarda en el campo `region` del documento.
+     */
+    fun actualizarInformacionBasica(
+        nombre: String,
+        telefono: String,
+        ciudad: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val uid = auth.currentUser?.uid
+
+        if (uid == null) {
+            onError("No hay un usuario autenticado")
+            return
+        }
+
+        if (nombre.isBlank()) {
+            onError("El nombre no puede estar vacío")
+            return
+        }
+
+        val nombreFinal = nombre.trim()
+        val telefonoFinal = telefono.trim()
+        val ciudadFinal = ciudad.trim()
+
+        authRepository.actualizarCamposUsuario(
+            uid = uid,
+            campos = mapOf(
+                "nombre" to nombreFinal,
+                "telefono" to telefonoFinal,
+                "region" to ciudadFinal
+            ),
+            onSuccess = {
+
+                _usuario.value = _usuario.value?.copy(
+                    nombre = nombreFinal,
+                    telefono = telefonoFinal,
+                    region = ciudadFinal
+                )
+                onSuccess()
+            },
+            onError = onError
+        )
+    }
+
+    /** Envía al correo de la cuenta el enlace de Firebase para cambiar la contraseña. */
+    fun enviarCorreoCambioContraseña(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val correo = auth.currentUser?.email ?: _usuario.value?.correo
+
+        if (correo.isNullOrBlank()) {
+            onError("No hay un correo asociado a la cuenta")
+            return
+        }
+
+        authRepository.recuperarContraseña(
+            correo = correo,
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
     fun actualizarFotoPerfil(
         fotoUri: Uri,
         onSuccess: () -> Unit,

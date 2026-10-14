@@ -27,9 +27,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyRowItems
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -42,9 +46,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,31 +60,46 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.minkaart2.app.R
+import com.minkaart2.app.data.CatalogosProducto
+import com.minkaart2.app.data.model.Product
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BottomNavBar
 import com.minkaart2.app.ui.components.BottomNavItemData
 import com.minkaart2.app.ui.components.EfectoNotificaciones
+import com.minkaart2.app.ui.components.IconoAccion
 import com.minkaart2.app.ui.components.IconoCamara
 import com.minkaart2.app.ui.components.IconoNotificaciones
+import com.minkaart2.app.ui.components.LogoMinkaEncabezado
 import com.minkaart2.app.ui.components.ProductoFeedCard
 import com.minkaart2.app.ui.components.RolePillToggle
+import com.minkaart2.app.ui.theme.AzulClaro
+import com.minkaart2.app.ui.theme.Borgona
+import com.minkaart2.app.ui.theme.Guinda
+import com.minkaart2.app.ui.theme.Marfil
+import com.minkaart2.app.util.etiquetaCategoria
+import com.minkaart2.app.util.etiquetaColor
+import com.minkaart2.app.util.etiquetaMateriaPrima
+import com.minkaart2.app.util.etiquetaTamano
+import com.minkaart2.app.util.normalizar
 import com.minkaart2.app.viewModel.HomeClienteViewModel
 import com.minkaart2.app.viewModel.NotificationsViewModel
-import com.minkaart2.app.util.normalizar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val Guinda = Color(0xFF3B0F1A)
-private val Borgona = Color(0xFF66172E)
-private val AzulAcero = Color(0xFF55708E)
-private val Marfil = Color(0xFFF2EDE6)
 private val TextoSecundario = Color(0xFF8A7480)
+
+// Valor interno de "sin filtro" en los chips de categoría — nunca se guarda en Firestore,
+// solo se compara; lo que se muestra se traduce con R.string.todos.
+private const val TODOS = "Todos"
 
 @Composable
 fun HomeClienteScreen(navController: NavController) {
@@ -100,8 +119,9 @@ fun HomeClienteScreen(navController: NavController) {
     val esArtesano by viewModel.esArtesano
     val noLeidas by notificationsViewModel.noLeidas
 
-    var categoriaSeleccionada by remember { mutableStateOf("Todos") }
-    var materiaPrimaSeleccionada by remember { mutableStateOf("Todos") }
+    // Filtros del catálogo (panel de filtros). Se mantienen al cambiar de categoría.
+    var filtros by remember { mutableStateOf(FiltrosCatalogo()) }
+    var filtrosAbiertos by remember { mutableStateOf(false) }
 
     // Texto tal como se escribe, y su versión "asentada" 300ms después de la última
     // tecla — evita recalcular el filtro en cada pulsación si el catálogo crece.
@@ -116,9 +136,8 @@ fun HomeClienteScreen(navController: NavController) {
     // Para que "Buscar" de la barra inferior haga algo: sube el feed hasta arriba
     // (la barra de búsqueda vive en esta misma pantalla, no en una ruta aparte) y le
     // da foco al campo de texto para que el teclado se abra listo para escribir.
-    val gridState = rememberLazyGridState()
+    var subirFeed by remember { mutableIntStateOf(0) }
     val focusRequesterBusqueda = remember { FocusRequester() }
-    val coroutineScope = rememberCoroutineScope()
     val tecladoController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
@@ -160,48 +179,59 @@ fun HomeClienteScreen(navController: NavController) {
     }
 
     val categorias = remember(productos) {
-        listOf("Todos") + productos
+        listOf(TODOS) + productos
             .map { it.categoria.trim() }
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
     }
 
+    // Opciones del panel de filtros: derivadas de los valores reales presentes en los
+    // productos cargados (igual que las categorías), no de las listas fijas completas.
     val materiasPrimas = remember(productos) {
-        listOf("Todos") + productos
+        productos
             .map { it.materiaPrima.trim() }
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
     }
 
+    val ubicaciones = remember(productos) {
+        productos
+            .map { it.departamento.ifBlank { it.regionOrigen }.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
+
+    val colores = remember(productos) {
+        productos
+            .map { it.color.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedBy { CatalogosProducto.COLORES.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+    }
+
+    val tamanos = remember(productos) {
+        productos
+            .map { it.tamano.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedBy { CatalogosProducto.TAMANOS.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+    }
+
     val textoBuscadoNormalizado = remember(textoBusquedaDebounced) {
         normalizar(textoBusquedaDebounced)
     }
 
-    // Categoría, materia prima y texto se combinan con AND: el producto tiene que
-    // cumplir todas las condiciones activas a la vez (las que estén en "Todos" no
-    // filtran nada).
-    val productosFiltrados = remember(
-        productos,
-        categoriaSeleccionada,
-        materiaPrimaSeleccionada,
-        textoBuscadoNormalizado
-    ) {
-        productos.filter { producto ->
+    // El pager y los chips de categoría van en sincronía: deslizar la pantalla cambia la
+    // categoría activa y la fila de chips se desplaza sola para que siga visible.
+    val pagerState = rememberPagerState(pageCount = { categorias.size })
+    val chipsState = rememberLazyListState()
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
-            val cumpleCategoria = categoriaSeleccionada == "Todos" ||
-                producto.categoria == categoriaSeleccionada
-
-            val cumpleMateriaPrima = materiaPrimaSeleccionada == "Todos" ||
-                producto.materiaPrima == materiaPrimaSeleccionada
-
-            val cumpleTexto = textoBuscadoNormalizado.isBlank() ||
-                normalizar(producto.nombre).contains(textoBuscadoNormalizado) ||
-                normalizar(producto.descripcion).contains(textoBuscadoNormalizado)
-
-            cumpleCategoria && cumpleMateriaPrima && cumpleTexto
-        }
+    LaunchedEffect(pagerState.currentPage) {
+        chipsState.animateScrollToItem((pagerState.currentPage - 1).coerceAtLeast(0))
     }
 
     Column(
@@ -222,24 +252,7 @@ fun HomeClienteScreen(navController: NavController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-
-                Box(
-                    modifier = Modifier
-                        .height(28.dp)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Guinda)
-                )
-
-                Text(
-                    text = "Minka Art",
-                    color = Guinda,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 10.dp)
-                )
-            }
+            LogoMinkaEncabezado(colorEslogan = Guinda)
 
             IconoNotificaciones(
                 noLeidas = noLeidas,
@@ -254,7 +267,10 @@ fun HomeClienteScreen(navController: NavController) {
         if (esArtesano) {
 
             RolePillToggle(
-                opciones = listOf("cliente" to "Cliente", "artesano" to "Artesano"),
+                opciones = listOf(
+                    "cliente" to stringResource(R.string.modo_cliente),
+                    "artesano" to stringResource(R.string.modo_artesano)
+                ),
                 valorSeleccionado = "cliente",
                 onSeleccionar = { valor ->
 
@@ -275,86 +291,109 @@ fun HomeClienteScreen(navController: NavController) {
             )
         }
 
-        // Barra de búsqueda
+        // Barra de búsqueda + botón de filtros
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = null,
-                tint = TextoSecundario,
-                modifier = Modifier.size(16.dp)
-            )
-
-            Box(
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 8.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
 
-                if (textoBusqueda.isEmpty()) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = TextoSecundario,
+                    modifier = Modifier.size(16.dp)
+                )
 
-                    Text(
-                        text = "Buscar artesanía, técnica, región…",
-                        color = TextoSecundario,
-                        style = MaterialTheme.typography.bodySmall
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
+                ) {
+
+                    if (textoBusqueda.isEmpty()) {
+
+                        Text(
+                            text = stringResource(R.string.buscar_placeholder),
+                            color = TextoSecundario,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    BasicTextField(
+                        value = textoBusqueda,
+                        onValueChange = { textoBusqueda = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
+                        cursorBrush = SolidColor(Borgona),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequesterBusqueda)
                     )
                 }
 
-                BasicTextField(
-                    value = textoBusqueda,
-                    onValueChange = { textoBusqueda = it },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(color = Guinda),
-                    cursorBrush = SolidColor(Borgona),
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequesterBusqueda)
-                )
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(Borgona)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { navController.navigate(Routes.RECOGNITION) }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // No hay un ícono de cámara en el set básico de Material (y el
+                    // proyecto no tiene material-icons-extended) — se dibuja a mano con
+                    // Canvas en vez de agregar una dependencia nueva solo por un ícono.
+                    IconoCamara(
+                        modifier = Modifier.size(16.dp),
+                        color = Color.White,
+                        colorFondo = Borgona
+                    )
+                }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(Borgona)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { navController.navigate(Routes.RECOGNITION) }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                // No hay un ícono de cámara en el set básico de Material (y el
-                // proyecto no tiene material-icons-extended) — se dibuja a mano con
-                // Canvas en vez de agregar una dependencia nueva solo por un ícono.
-                IconoCamara(
-                    modifier = Modifier.size(16.dp),
-                    color = Color.White,
-                    colorFondo = Borgona
+            // Botón de filtros: ícono vinotinto; el punto/píldora de novedad indica
+            // cuántos filtros hay aplicados.
+            Box(modifier = Modifier.padding(start = 10.dp)) {
+
+                IconoAccion(
+                    painter = painterResource(id = R.drawable.ic_filtros),
+                    descripcion = stringResource(R.string.filtros_titulo),
+                    onClick = { filtrosAbiertos = true },
+                    novedades = filtros.cantidad,
+                    tamano = 42.dp
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Chips de categoría
+        // Chips de categoría — se desplazan solos al deslizar entre categorías; tocar uno
+        // también cambia de categoría.
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
+            state = chipsState,
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
 
-            lazyRowItems(categorias) { categoria ->
+            items(count = categorias.size) { indice ->
 
-                val activo = categoria == categoriaSeleccionada
+                val categoria = categorias[indice]
+                val activo = indice == pagerState.currentPage
 
                 Box(
                     modifier = Modifier
@@ -363,12 +402,18 @@ fun HomeClienteScreen(navController: NavController) {
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { categoriaSeleccionada = categoria }
+                            onClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(indice) }
+                            }
                         )
                         .padding(horizontal = 14.dp, vertical = 7.dp)
                 ) {
                     Text(
-                        text = categoria,
+                        text = if (categoria == TODOS) {
+                            stringResource(R.string.todos)
+                        } else {
+                            etiquetaCategoria(categoria)
+                        },
                         color = if (activo) Marfil else TextoSecundario,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
@@ -377,36 +422,50 @@ fun HomeClienteScreen(navController: NavController) {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // Filtros aplicados, como chips pequeños que se pueden quitar uno a uno.
+        if (!filtros.vacio) {
 
-        // Chips de materia prima — mismo patrón que los de categoría, combinables con
-        // ella y con el buscador.
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
 
-            lazyRowItems(materiasPrimas) { materiaPrima ->
+                lazyRowItems(filtros.materiales.toList()) { valor ->
+                    ChipFiltroAplicado(
+                        texto = etiquetaMateriaPrima(valor),
+                        onQuitar = { filtros = filtros.copy(materiales = filtros.materiales - valor) }
+                    )
+                }
 
-                val activo = materiaPrima == materiaPrimaSeleccionada
+                lazyRowItems(filtros.ubicaciones.toList()) { valor ->
+                    ChipFiltroAplicado(
+                        texto = valor,
+                        onQuitar = { filtros = filtros.copy(ubicaciones = filtros.ubicaciones - valor) }
+                    )
+                }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (activo) AzulAcero else Color.White)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { materiaPrimaSeleccionada = materiaPrima }
-                        )
-                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = materiaPrima,
-                        color = if (activo) Marfil else TextoSecundario,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
+                lazyRowItems(filtros.colores) { valor ->
+                    ChipFiltroAplicado(
+                        texto = etiquetaColor(valor),
+                        onQuitar = { filtros = filtros.copy(colores = filtros.colores - valor) }
+                    )
+                }
+
+                lazyRowItems(filtros.tamanos.toList()) { valor ->
+                    ChipFiltroAplicado(
+                        texto = etiquetaTamano(valor),
+                        onQuitar = { filtros = filtros.copy(tamanos = filtros.tamanos - valor) }
+                    )
+                }
+
+                item {
+                    ChipFiltroAplicado(
+                        texto = stringResource(R.string.filtros_limpiar_corto),
+                        onQuitar = { filtros = FiltrosCatalogo() },
+                        conCruz = false
                     )
                 }
             }
@@ -436,67 +495,96 @@ fun HomeClienteScreen(navController: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Todavía no hay artesanías publicadas",
+                    text = stringResource(R.string.sin_publicaciones),
                     color = TextoSecundario,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
 
-        } else if (productosFiltrados.isEmpty()) {
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "No encontramos artesanías con ese criterio",
-                    color = TextoSecundario,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 32.dp)
-                )
-            }
-
         } else {
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                state = gridState,
+            // Carrusel de páginas: una por categoría. Texto, filtros y categoría se
+            // combinan con AND; todo en memoria, sin consultas nuevas.
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+                key = { categorias.getOrElse(it) { TODOS } }
+            ) { pagina ->
 
-                items(
-                    items = productosFiltrados,
-                    key = { it.id }
-                ) { producto ->
+                val categoria = categorias.getOrElse(pagina) { TODOS }
 
-                    ProductoFeedCard(
-                        producto = producto,
-                        nombreArtesano = nombresArtesanos[producto.artesanoId],
-                        leGustaAlUsuario = productosLikeados.contains(producto.id),
-                        onClick = {
-                            navController.navigate(Routes.productDetailRoute(producto.id))
-                        },
-                        onLikeClick = {
-                            viewModel.alternarLike(
-                                productoId = producto.id,
-                                onError = { mensaje ->
-                                    Toast.makeText(context, mensaje, Toast.LENGTH_SHORT).show()
-                                }
+                val productosFiltrados = remember(
+                    productos,
+                    categoria,
+                    filtros,
+                    textoBuscadoNormalizado
+                ) {
+                    filtrarProductos(productos, categoria, filtros, textoBuscadoNormalizado)
+                }
+
+                val gridState = rememberLazyGridState()
+
+                LaunchedEffect(subirFeed) {
+                    if (subirFeed > 0 && pagina == pagerState.currentPage) {
+                        gridState.animateScrollToItem(0)
+                    }
+                }
+
+                if (productosFiltrados.isEmpty()) {
+
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.sin_resultados_criterio),
+                            color = TextoSecundario,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        )
+                    }
+
+                } else {
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+
+                        items(
+                            items = productosFiltrados,
+                            key = { it.id }
+                        ) { producto ->
+
+                            ProductoFeedCard(
+                                producto = producto,
+                                nombreArtesano = nombresArtesanos[producto.artesanoId],
+                                leGustaAlUsuario = productosLikeados.contains(producto.id),
+                                onClick = {
+                                    navController.navigate(Routes.productDetailRoute(producto.id))
+                                },
+                                onLikeClick = {
+                                    viewModel.alternarLike(
+                                        productoId = producto.id,
+                                        onError = { mensaje ->
+                                            Toast.makeText(context, mensaje, Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                },
+                                onArtesanoClick = {
+                                    navController.navigate(
+                                        Routes.artisanProfileRoute(producto.artesanoId)
+                                    )
+                                },
+                                confianzaArtesano = statsArtesanos[producto.artesanoId]
                             )
-                        },
-                        onArtesanoClick = {
-                            navController.navigate(
-                                Routes.artisanProfileRoute(producto.artesanoId)
-                            )
-                        },
-                        confianzaArtesano = statsArtesanos[producto.artesanoId]
-                    )
+                        }
+                    }
                 }
             }
         }
@@ -505,33 +593,107 @@ fun HomeClienteScreen(navController: NavController) {
             items = listOf(
                 BottomNavItemData(
                     icon = Icons.Filled.Home,
-                    label = "Inicio",
+                    label = stringResource(R.string.nav_inicio),
                     activo = true,
                     onClick = {}
                 ),
                 BottomNavItemData(
                     icon = Icons.Filled.Search,
-                    label = "Buscar",
+                    label = stringResource(R.string.nav_buscar),
                     activo = false,
                     onClick = {
-                        coroutineScope.launch { gridState.animateScrollToItem(0) }
+                        subirFeed++
                         focusRequesterBusqueda.requestFocus()
                         tecladoController?.show()
                     }
                 ),
                 BottomNavItemData(
                     icon = Icons.Filled.Favorite,
-                    label = "Likes",
+                    label = stringResource(R.string.nav_likes),
                     activo = false,
                     onClick = { navController.navigate(Routes.LIKES) }
                 ),
                 BottomNavItemData(
                     icon = Icons.Filled.Person,
-                    label = "Perfil",
+                    label = stringResource(R.string.nav_perfil),
                     activo = false,
                     onClick = { navController.navigate(Routes.CLIENT_PROFILE) }
                 )
             )
         )
+    }
+
+    if (filtrosAbiertos) {
+
+        PanelFiltros(
+            materiales = materiasPrimas,
+            ubicaciones = ubicaciones,
+            colores = colores,
+            tamanos = tamanos,
+            aplicados = filtros,
+            onAplicar = {
+                filtros = it
+                filtrosAbiertos = false
+            },
+            onCerrar = { filtrosAbiertos = false }
+        )
+    }
+}
+
+private fun filtrarProductos(
+    productos: List<Product>,
+    categoria: String,
+    filtros: FiltrosCatalogo,
+    textoNormalizado: String
+): List<Product> = productos.filter { producto ->
+
+    val cumpleCategoria = categoria == TODOS || producto.categoria == categoria
+
+    val cumpleTexto = textoNormalizado.isBlank() ||
+        normalizar(producto.nombre).contains(textoNormalizado) ||
+        normalizar(producto.descripcion).contains(textoNormalizado)
+
+    cumpleCategoria && cumpleTexto && filtros.acepta(producto)
+}
+
+/** Chip pequeño de un filtro aplicado; tocarlo lo quita. */
+@Composable
+private fun ChipFiltroAplicado(
+    texto: String,
+    onQuitar: () -> Unit,
+    conCruz: Boolean = true
+) {
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (conCruz) AzulClaro else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onQuitar
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Text(
+            text = texto,
+            color = if (conCruz) Guinda else Borgona,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (conCruz) FontWeight.Medium else FontWeight.Bold
+        )
+
+        if (conCruz) {
+
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = null,
+                tint = Guinda,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(12.dp)
+            )
+        }
     }
 }

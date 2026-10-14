@@ -80,8 +80,6 @@ fun ClientProfileScreen(navController: NavController) {
     // rol == "cliente") y necesita una salida de vuelta a su propio Home.
     val esArtesano = usuario?.rol == "artesano"
 
-    var mostrarDialogoNombre by remember { mutableStateOf(false) }
-
     val selectorFoto = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -246,7 +244,7 @@ fun ClientProfileScreen(navController: NavController) {
                 MenuItem(
                     icon = Icons.Filled.Edit,
                     texto = "Información básica",
-                    onClick = { mostrarDialogoNombre = true }
+                    onClick = { navController.navigate(Routes.EDIT_PROFILE) }
                 )
 
                 MenuItem(
@@ -300,58 +298,6 @@ fun ClientProfileScreen(navController: NavController) {
                 )
             }
         }
-    }
-
-    if (mostrarDialogoNombre) {
-
-        var nombreEditado by remember { mutableStateOf(usuario?.nombre ?: "") }
-
-        AlertDialog(
-            onDismissRequest = { mostrarDialogoNombre = false },
-            title = { Text("Información básica") },
-            text = {
-                OutlinedTextField(
-                    value = nombreEditado,
-                    onValueChange = { nombreEditado = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-
-                TextButton(
-                    onClick = {
-
-                        viewModel.actualizarNombre(
-                            nombre = nombreEditado,
-
-                            onSuccess = {
-
-                                mostrarDialogoNombre = false
-
-                                Toast.makeText(
-                                    context,
-                                    "Nombre actualizado",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-
-                            onError = { mensaje ->
-                                Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
-                            }
-                        )
-                    }
-                ) {
-                    Text("Guardar")
-                }
-            },
-            dismissButton = {
-
-                TextButton(onClick = { mostrarDialogoNombre = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
     }
 }
 

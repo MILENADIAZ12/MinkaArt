@@ -34,7 +34,9 @@ service cloud.firestore {
         && despues.get('departamento', '') == antes.get('departamento', '')
         && despues.get('municipio', '') == antes.get('municipio', '')
         && despues.get('clasificacion', null) == antes.get('clasificacion', null)
-        && despues.get('categoriaOtro', null) == antes.get('categoriaOtro', null);
+        && despues.get('categoriaOtro', null) == antes.get('categoriaOtro', null)
+        && despues.get('color', '') == antes.get('color', '')
+        && despues.get('tamano', '') == antes.get('tamano', '');
   }
 
   match /databases/{database}/documents {

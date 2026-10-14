@@ -2,6 +2,8 @@ package com.minkaart2.app.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -12,7 +14,6 @@ import com.minkaart2.app.ui.admin.AdminRegisterScreen
 import com.minkaart2.app.ui.admin.AdminRuacListScreen
 import com.minkaart2.app.ui.admin.AdminRuacReviewScreen
 import com.minkaart2.app.ui.admin.AdminVisualEvalScreen
-import com.minkaart2.app.ui.components.PlaceholderScreen
 import com.minkaart2.app.ui.home.HomeArtesanoScreen
 import com.minkaart2.app.ui.home.HomeClienteScreen
 import com.minkaart2.app.ui.login.LoginScreen
@@ -20,6 +21,7 @@ import com.minkaart2.app.ui.notifications.NotificationsScreen
 import com.minkaart2.app.ui.product.ProductDetailScreen
 import com.minkaart2.app.ui.profile.ArtisanProfileScreen
 import com.minkaart2.app.ui.profile.ClientProfileScreen
+import com.minkaart2.app.ui.profile.EditProfileScreen
 import com.minkaart2.app.ui.profile.LikesScreen
 import com.minkaart2.app.ui.profile.ProfileScreen
 import com.minkaart2.app.ui.publication.EditProductScreen
@@ -33,8 +35,11 @@ import com.minkaart2.app.ui.sales.PurchaseHistoryScreen
 import com.minkaart2.app.ui.sales.QualityTrustScreen
 import com.minkaart2.app.ui.sales.RateSaleScreen
 import com.minkaart2.app.ui.sales.RegisterSaleScreen
+import com.minkaart2.app.ui.settings.AccountSettingsScreen
+import com.minkaart2.app.ui.terms.TermsScreen
 import com.minkaart2.app.ui.welcome.WelcomeScreen
 import com.minkaart2.app.ui.publication.MyProductsScreen
+import com.minkaart2.app.viewModel.SesionViewModel
 
 @Composable
 fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null) {
@@ -59,9 +64,32 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
         }
     }
 
+    // Sesión persistente: con sesión guardada la app arranca directo en el Home del rol.
+    val sesionViewModel: SesionViewModel = viewModel()
+    val destinoInicial = remember { sesionViewModel.destinoInicial() }
+
+    // Sesión de antes del almacén local (hay usuario en Auth pero no rol guardado): se
+    // arranca en Bienvenida y, tras consultar el rol una vez, se pasa a su Home — solo si
+    // la persona sigue en Bienvenida (no si una notificación ya la llevó a otra pantalla).
+    LaunchedEffect(Unit) {
+
+        if (sesionViewModel.requiereRecuperarRol()) {
+
+            sesionViewModel.recuperarRol { home ->
+
+                if (navController.currentDestination?.route == Routes.WELCOME) {
+
+                    navController.navigate(home) {
+                        popUpTo(Routes.WELCOME) { inclusive = true }
+                    }
+                }
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
-        startDestination = Routes.WELCOME
+        startDestination = destinoInicial
     ) {
 
         composable(Routes.WELCOME) {
@@ -109,6 +137,10 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
                     modoGoogleInicial = backStackEntry.arguments?.getBoolean("google") ?: false
                 )
             }
+        }
+
+        composable(Routes.TERMS) {
+            TermsScreen(navController)
         }
 
         composable(Routes.HOME_CLIENTE) {
@@ -221,7 +253,11 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
         }
 
         composable(Routes.ACCOUNT_SETTINGS) {
-            PlaceholderScreen(titulo = "Configuración de la cuenta")
+            AccountSettingsScreen(navController)
+        }
+
+        composable(Routes.EDIT_PROFILE) {
+            EditProfileScreen(navController)
         }
 
         composable(Routes.RECOGNITION) {

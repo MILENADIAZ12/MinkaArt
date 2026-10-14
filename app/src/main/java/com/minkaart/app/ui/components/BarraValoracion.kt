@@ -17,8 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.minkaart2.app.R
 
 private val Guinda = Color(0xFF3B0F1A)
 private val Borgona = Color(0xFF66172E)
@@ -127,12 +129,15 @@ fun BarraValoracionCompacta(
     }
 }
 
+@Composable
 private fun textoConteo(conteo: Int, promedio: Double?): String {
 
     if (conteo == 0 || promedio == null) {
-        return "Sin verificaciones"
+        return stringResource(R.string.sin_verificaciones)
     }
 
-    val plural = if (conteo == 1) "verificación" else "verificaciones"
-    return "$conteo $plural"
+    return stringResource(
+        if (conteo == 1) R.string.una_verificacion else R.string.n_verificaciones,
+        conteo
+    )
 }

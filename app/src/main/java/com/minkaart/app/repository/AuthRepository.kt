@@ -15,6 +15,7 @@ import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.GoogleAuthProvider
@@ -24,7 +25,9 @@ import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.FirebaseStorage
+import com.minkaart2.app.data.VERSION_TERMINOS
 import com.minkaart2.app.data.model.User
+import com.minkaart2.app.util.SesionLocal
 
 class AuthRepository {
 
@@ -273,6 +276,7 @@ class AuthRepository {
 
     fun cerrarSesion() {
         auth.signOut()
+        SesionLocal.limpiar()
     }
 
     fun recuperarContraseña(
@@ -280,14 +284,32 @@ class AuthRepository {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        auth.sendPasswordResetEmail(correo)
+        // El correo lo envía la Cloud Function "enviarEnlaceCambioContrasena" por Resend,
+        // en español (el de Firebase salía en inglés y caía en spam).
+        functions
+            .getHttpsCallable("enviarEnlaceCambioContrasena")
+            .call(hashMapOf("correo" to correo))
             .addOnSuccessListener {
                 onSuccess()
             }
-            .addOnFailureListener {
+            .addOnFailureListener { error ->
+
+                val excepcion = error as? FirebaseFunctionsException
+
                 onError(
-                    it.message
-                        ?: "Error al enviar el correo de recuperación"
+                    when (excepcion?.code) {
+                        FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
+                            "El correo electrónico no es válido"
+
+                        FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
+                            "Espera un minuto antes de pedir otro correo"
+
+                        FirebaseFunctionsException.Code.UNAVAILABLE,
+                        FirebaseFunctionsException.Code.DEADLINE_EXCEEDED ->
+                            "Revisa tu conexión a internet e intenta de nuevo"
+
+                        else -> "Error al enviar el correo de recuperación"
+                    }
                 )
             }
     }
@@ -535,11 +557,15 @@ class AuthRepository {
             return
         }
 
+        // GoogleSignInViewModel ya validó que se aceptaron los términos antes de llegar aquí.
         val cliente = User(
             uid = usuario.uid,
             nombre = usuario.displayName ?: "",
             correo = usuario.email ?: "",
-            rol = "cliente"
+            rol = "cliente",
+            aceptoTerminos = true,
+            terminosAceptadosEn = Timestamp.now(),
+            versionTerminos = VERSION_TERMINOS
         )
 
         firestore.collection("usuarios")
@@ -600,7 +626,11 @@ class AuthRepository {
                             uid = uidCreado,
                             nombre = nombre,
                             correo = correo,
-                            rol = "administrador"
+                            rol = "administrador",
+                            // AdminRegisterViewModel ya validó que se aceptaron los términos.
+                            aceptoTerminos = true,
+                            terminosAceptadosEn = Timestamp.now(),
+                            versionTerminos = VERSION_TERMINOS
                         )
 
                         firestore.collection("usuarios")

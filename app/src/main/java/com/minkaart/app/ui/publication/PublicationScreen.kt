@@ -70,6 +70,8 @@ fun PublicationScreen(navController: NavController) {
     var categoria by remember { mutableStateOf("") }
     var categoriaOtro by remember { mutableStateOf("") }
     var clasificacion by remember { mutableStateOf(CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR) }
+    var color by remember { mutableStateOf(CatalogosProducto.SIN_ESPECIFICAR) }
+    var tamano by remember { mutableStateOf(CatalogosProducto.SIN_ESPECIFICAR) }
 
     val imagenesUris = remember { mutableStateListOf<Uri>() }
 
@@ -252,6 +254,20 @@ fun PublicationScreen(navController: NavController) {
                 onSeleccionar = { clasificacion = it }
             )
 
+            MinkaDropdownField(
+                label = "Color (opcional)",
+                opciones = listOf(CatalogosProducto.SIN_ESPECIFICAR) + CatalogosProducto.COLORES,
+                valorSeleccionado = color,
+                onSeleccionar = { color = it }
+            )
+
+            MinkaDropdownField(
+                label = "Tamaño (opcional)",
+                opciones = listOf(CatalogosProducto.SIN_ESPECIFICAR) + CatalogosProducto.TAMANOS,
+                valorSeleccionado = tamano,
+                onSeleccionar = { tamano = it }
+            )
+
             Spacer(modifier = Modifier.height(12.dp))
 
             GradientButton(
@@ -273,6 +289,8 @@ fun PublicationScreen(navController: NavController) {
                         categoriaOtro = categoriaOtro,
                         clasificacion = clasificacion
                             .takeUnless { it == CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR },
+                        color = if (color == CatalogosProducto.SIN_ESPECIFICAR) "" else color,
+                        tamano = if (tamano == CatalogosProducto.SIN_ESPECIFICAR) "" else tamano,
                         imagenesUris = imagenesUris.toList(),
 
                         onSuccess = {
@@ -294,6 +312,8 @@ fun PublicationScreen(navController: NavController) {
                             categoria = ""
                             categoriaOtro = ""
                             clasificacion = CatalogosProducto.CLASIFICACION_SIN_ESPECIFICAR
+                            color = CatalogosProducto.SIN_ESPECIFICAR
+                            tamano = CatalogosProducto.SIN_ESPECIFICAR
                             imagenesUris.clear()
                         },
 

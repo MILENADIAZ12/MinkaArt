@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.minkaart2.app.data.model.User
 import com.minkaart2.app.navigation.Routes
+import com.minkaart2.app.ui.components.LogoMinkaEncabezado
 import com.minkaart2.app.viewModel.AdminRuacListViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -117,11 +118,10 @@ fun AdminRuacListScreen(navController: NavController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            Text(
-                text = "Solicitudes de RUAC",
-                color = Guinda,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+            LogoMinkaEncabezado(
+                titulo = "Solicitudes de RUAC",
+                colorTitulo = Guinda,
+                colorEslogan = Borgona
             )
 
             // Herramienta aparte para el documento de grado (ver README, "Evaluación") —
