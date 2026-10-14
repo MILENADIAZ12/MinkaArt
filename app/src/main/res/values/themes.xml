@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MinkaArt_bta" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.MinkaArt_bta" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Splash nativo (minSdk 31): blanco y sin ícono, para enlazar sin saltos con SplashScreen. -->
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icono_vacio</item>
+    </style>
 </resources>

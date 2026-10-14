@@ -229,6 +229,9 @@ app/src/main/
     │                                       # recorte ajustable estilo Google Lens)
     ├── register/RegisterScreen.kt
     ├── roleselection/RoleSelectionScreen.kt # "¿Cómo quieres usar MinkaArt?": Soy artesano / Soy cliente
+    ├── splash/SplashScreen.kt               # splash de marca: fondo blanco, logo1.png (blanco sobre vinotinto)
+    │                                         # recoloreado a Guinda con un ColorFilter de luminancia→alfa, y una
+    │                                         # única pincelada de hebras (AzulAcero) que cruza la "K" de MINKA, a medio trazar
     ├── welcome/WelcomeScreen.kt
     └── theme/
         ├── Color.kt
@@ -287,7 +290,8 @@ de `AppNavigation.kt`:
 
 | Constante | Valor | Pantalla | ¿Registrada en el `NavHost`? | ¿Alguien navega hacia ella? |
 |---|---|---|---|---|
-| `WELCOME` | `welcome` | `WelcomeScreen` | Sí (destino inicial) | — |
+| `SPLASH` | `splash` | `SplashScreen` (fondo blanco, logo + una pincelada animada; ~2,1 s) | Sí (destino inicial) | — (se abre sola al arrancar y navega a `WELCOME` con `popUpTo(SPLASH) { inclusive = true }`) |
+| `WELCOME` | `welcome` | `WelcomeScreen` | Sí | `SplashScreen`, `ClientProfileScreen` (cerrar sesión) |
 | `LOGIN` | `login` | `LoginScreen` | Sí | `WelcomeScreen`, `LoginScreen` (recuperar contraseña) |
 | `ROLE_SELECTION` | `role_selection?google={google}` | `RoleSelectionScreen` | Sí, con argumento opcional `google` (Bool, por defecto `false`) | `WelcomeScreen` ("Registrarse"), `LoginScreen` ("Regístrate" y usuario nuevo de Google, con `google=true`) |
 | `REGISTER` | `register/{rol}?google={google}` | `RegisterScreen` | Sí, con argumento `rol` (`cliente`/`artesano`; otro valor no renderiza nada) y `google` opcional | `RoleSelectionScreen` (`Routes.registerRoute(rol, google)`) |
@@ -1236,6 +1240,14 @@ mapeada a roles de Material 3 en `Theme.kt`:
 | `AzulClaro` | `#B7C7D9` | Detalles, fondos suaves |
 | `AzulAcero` | `#55708E` | Acentos fríos, degradado de botones |
 | `Marfil` | `#F2EDE6` | Blanco cálido — fondo principal, texto sobre oscuro |
+| `Blanco` | `#FFFFFF` | Blanco puro — solo el splash (`SplashScreen`); el resto de la app usa `Marfil` |
+
+**Splash**: dos capas que enlazan sin saltos. (1) El splash nativo de Android 12+ (`minSdk` es
+31, sin dependencia `core-splashscreen`) queda en blanco y sin ícono (`windowSplashScreenBackground`
++ `windowSplashScreenAnimatedIcon = @drawable/splash_icono_vacio` en `Theme.MinkaArt_bta`).
+(2) `SplashScreen` (ruta `SPLASH`) dibuja el logo `res/drawable/logo1.png` (nombre en minúsculas:
+Android no admite `.PNG`) y anima la pincelada. No hay navegación condicionada a la sesión:
+siempre pasa a `WELCOME`.
 
 Es el brand kit v2; solo hay 5 tokens para los ~15 roles de `lightColorScheme` de
 Material 3, así que `Theme.kt` reutiliza tokens entre varios roles (ver comentarios en el

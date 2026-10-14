@@ -2,6 +2,8 @@ package com.minkaart2.app.navigation
 
 object Routes {
 
+    const val SPLASH = "splash"
+
     const val WELCOME = "welcome"
 
     const val LOGIN = "login"

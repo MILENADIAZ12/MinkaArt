@@ -33,6 +33,7 @@ import com.minkaart2.app.ui.sales.PurchaseHistoryScreen
 import com.minkaart2.app.ui.sales.QualityTrustScreen
 import com.minkaart2.app.ui.sales.RateSaleScreen
 import com.minkaart2.app.ui.sales.RegisterSaleScreen
+import com.minkaart2.app.ui.splash.SplashScreen
 import com.minkaart2.app.ui.welcome.WelcomeScreen
 import com.minkaart2.app.ui.publication.MyProductsScreen
 
@@ -61,8 +62,12 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
 
     NavHost(
         navController = navController,
-        startDestination = Routes.WELCOME
+        startDestination = Routes.SPLASH
     ) {
+
+        composable(Routes.SPLASH) {
+            SplashScreen(navController)
+        }
 
         composable(Routes.WELCOME) {
             WelcomeScreen(navController)
