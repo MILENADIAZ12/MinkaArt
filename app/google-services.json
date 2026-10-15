@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "67997425312-bk7lrvlbjha5608as4tndvphsu10th4a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.minkaart2.app",
+            "certificate_hash": "baa07f7682fbe3d41c58746a15d89d18622583e8"
+          }
+        },
+        {
           "client_id": "67997425312-p9ip5q54akqmplp86qgpu59mk20km068.apps.googleusercontent.com",
           "client_type": 3
         }

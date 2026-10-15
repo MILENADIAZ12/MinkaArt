@@ -97,6 +97,13 @@ service cloud.firestore {
       allow write: if false; // se edita a mano desde la consola de Firebase
     }
 
+    // Versión publicada de la app (aviso de actualización). Lectura pública porque la
+    // ventana también sale en Bienvenida, sin sesión iniciada.
+    match /configuracion/version {
+      allow get: if true;
+      allow write: if false; // se edita a mano desde la consola de Firebase
+    }
+
     // =========================
     // PRODUCTOS
     // =========================

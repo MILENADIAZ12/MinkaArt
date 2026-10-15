@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -26,8 +28,32 @@ android {
         }
     }
 
+    // Firma de release: los datos de la llave viven en keystore.properties (raíz del
+    // proyecto, ignorado por git — ver README, "Publicar una actualización"). Sin ese
+    // archivo el release sale sin firmar y el build de debug no se ve afectado.
+    val archivoLlave = rootProject.file("keystore.properties")
+    val propiedadesLlave = Properties()
+
+    if (archivoLlave.exists()) {
+        archivoLlave.inputStream().use { propiedadesLlave.load(it) }
+    }
+
+    signingConfigs {
+        if (archivoLlave.exists()) {
+            create("release") {
+                storeFile = file(propiedadesLlave.getProperty("storeFile"))
+                storePassword = propiedadesLlave.getProperty("storePassword")
+                keyAlias = propiedadesLlave.getProperty("keyAlias")
+                keyPassword = propiedadesLlave.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (archivoLlave.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

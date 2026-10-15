@@ -295,7 +295,7 @@ fun HomeClienteScreen(navController: NavController) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
 
@@ -304,7 +304,7 @@ fun HomeClienteScreen(navController: NavController) {
                     .weight(1f)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.White)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
 
@@ -344,8 +344,8 @@ fun HomeClienteScreen(navController: NavController) {
 
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(9.dp))
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Borgona)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -358,7 +358,7 @@ fun HomeClienteScreen(navController: NavController) {
                     // proyecto no tiene material-icons-extended) — se dibuja a mano con
                     // Canvas en vez de agregar una dependencia nueva solo por un ícono.
                     IconoCamara(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         color = Color.White,
                         colorFondo = Borgona
                     )
@@ -374,12 +374,12 @@ fun HomeClienteScreen(navController: NavController) {
                     descripcion = stringResource(R.string.filtros_titulo),
                     onClick = { filtrosAbiertos = true },
                     novedades = filtros.cantidad,
-                    tamano = 42.dp
+                    tamano = 36.dp
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Chips de categoría — se desplazan solos al deslizar entre categorías; tocar uno
         // también cambia de categoría.

@@ -134,6 +134,7 @@ app/src/main/
 │   ├── EscalaValoracion.kt  # niveles de calidad/confianza <-> puntos <-> etiqueta (Fase 6)
 │   └── model/
 │       ├── ArtesanoStats.kt # documento de "artesanoStats" — confianza del artesano
+│       ├── InfoVersion.kt  # documento "configuracion/version" (aviso de actualización)
 │       ├── HuellaVisual.kt # documento de "huellasVisuales" — motor ANTERIOR de
 │       │                     # reconocimiento visual, en transición (ver Stack técnico
 │       │                     # y "Estado actual y pendientes"); ya no lo usa la
@@ -148,6 +149,7 @@ app/src/main/
 │   └── Routes.kt             # constantes de ruta (String), incluye rutaDeNotificacion()
 ├── repository/
 │   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos de usuarios, actualizar campos, cerrar sesión
+│   ├── ConfiguracionRepository.kt # lee "configuracion/version" (aviso de actualización)
 │   ├── NotificationRepository.kt # leer notificaciones y marcarlas como leídas (nunca las crea)
 │   ├── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
 │   └── VisualSearchRepository.kt # CRUD de "huellasVisuales" — motor ANTERIOR, en
@@ -166,7 +168,8 @@ app/src/main/
 │                               # sigue corriendo (Publicar/Editar + autocompletado de
 │                               # HomeArtesanoScreen) solo para alimentar esa línea base
 ├── viewModel/                 # ¡ojo con mayúscula/minúscula, ver más abajo!
-│   ├── AdminRuacListViewModel.kt # solicitudes de RUAC pendientes
+│   ├── ActualizacionViewModel.kt # decide si hay versión nueva (opcional/obligatoria), una vez por arranque
+│   ├── AdminRuacListViewModel.kt # solicitudes de RUAC pendientes y cerrar sesión
 │   ├── ArtisanProfileViewModel.kt
 │   ├── ClientProfileViewModel.kt
 │   ├── HomeArtesanoViewModel.kt
@@ -188,7 +191,7 @@ app/src/main/
 └── ui/
     ├── admin/                     # Rol "administrador" (Fase 5)
     │   ├── AdminRegisterScreen.kt  # formulario mínimo: correo, contraseña, PIN
-    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes + botón "Evaluar
+    │   ├── AdminRuacListScreen.kt  # solicitudes de RUAC pendientes + botones "Cerrar sesión" y "Evaluar
     │   │                           # búsqueda visual" (a la derecha, bajo el encabezado; no
     │   │                           # genera huellas, solo evalúa)
     │   ├── AdminRuacReviewScreen.kt # aprobar/rechazar una solicitud
@@ -227,9 +230,10 @@ app/src/main/
     │   ├── SelectorIdioma.kt      # pills "ES | EN" (WelcomeScreen)
     │   ├── BarraValoracion.kt     # barra con degradado de marca (calidad/confianza), reemplaza a ConfianzaDots
     │   ├── ProductoFeedCard.kt    # tarjeta de producto (feed del cliente y perfil del artesano)
+    │   ├── DialogoActualizacion.kt # ventana "Actualización nueva" (logo, mensaje, Actualizar / Más tarde); la monta AppNavigation
     │   ├── BottomNavBar.kt        # barra inferior (Home cliente y Home artesano)
-    │   ├── LogoMinka.kt           # LogoCircular (logo1 recortado en círculo), LogoMinka (+ eslogan;
-    │   │                         # Bienvenida) y LogoMinkaEncabezado (logo + eslogan, título opcional; Home cliente/artesano
+    │   ├── LogoMinka.kt           # LogoCircular (logo1 recortado en círculo), LogoSinFondo (logo2 sin fondo,
+    │   │                         # teñido; Bienvenida), LogoMinka (+ eslogan, hoy sin uso) y LogoMinkaEncabezado (logo + eslogan, título opcional; Home cliente/artesano
     │   │                         # y panel del administrador)
     │   ├── IconoNotificaciones.kt # IconoAccion (círculo vinotinto + pictograma blanco + punto/píldora de novedad azul claro) y la campana que lo usa; compartido por los dos Home
     │   ├── MinkaDropdownField.kt  # selector de una lista fija (Departamento/Categoría/Clasificación)
@@ -349,7 +353,7 @@ de `AppNavigation.kt`:
 | `PROFILE` | `profile` | `ProfileScreen` (placeholder) | Sí | Nadie — reemplazado por `ARTISAN_PROFILE`/`CLIENT_PROFILE`; queda sin usar |
 | `RUAC_BADGE` | `ruac_badge/{artesanoId}` | `RuacBadgeScreen` (real desde Fase 5) | Sí, con argumento de ruta | `ArtisanProfileScreen` (chip de insignia RUAC verificado) |
 | `RECOGNITION` | `recognition` | `RecognitionScreen` (búsqueda visual real, ya no placeholder) | Sí | `HomeClienteScreen` (ícono de la barra de búsqueda) |
-| `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RegisterScreen` (enlace "¿Eres administrador?") |
+| `ADMIN_REGISTER` | `admin_register` | `AdminRegisterScreen` | Sí | `RoleSelectionScreen` (texto "¿Eres administrador? Regístrate aquí" bajo las dos tarjetas; solo fuera del modo Google), `RegisterScreen` (mismo enlace) |
 | `ADMIN_RUAC_LIST` | `admin_ruac_list` | `AdminRuacListScreen` | Sí | `LoginScreen` (rol `administrador`; también al entrar con Google siendo administrador), arranque con sesión guardada (`AppNavigation`) |
 | `ADMIN_RUAC_REVIEW` | `admin_ruac_review/{artesanoId}` | `AdminRuacReviewScreen` | Sí, con argumento de ruta | `AdminRuacListScreen` (tap en una solicitud) |
 | `REQUEST_RUAC` | `request_ruac` | `RequestRuacScreen` | Sí | `ArtisanProfileScreen` (botón "Agregar RUAC"/"Volver a solicitar RUAC", solo el propio artesano) |
@@ -446,6 +450,21 @@ registrarse (ver más abajo). **No lo crea ninguna pantalla de la app** — hay 
 mano en Firebase Console → Firestore Database antes de poder registrar la primera cuenta
 de administrador. Ver la advertencia de seguridad sobre este PIN en "Estado actual y
 pendientes".
+
+### Firestore — documento `configuracion/version` (aviso de actualización)
+
+Un único documento que **se crea y se edita a mano** en Firebase Console (ninguna pantalla lo
+escribe). Lo lee `ConfiguracionRepository.obtenerInfoVersion` al arrancar la app; modelo
+`data/model/InfoVersion.kt`. Reglas: `allow get: if true` (pública, porque la ventana también
+sale en Bienvenida, sin sesión) y `allow write: if false` — **hay que desplegar las reglas**
+(`firebase deploy --only firestore:rules`).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `versionActual` | `Number` | `versionCode` de la última versión publicada. Si el instalado es menor, sale la ventana (se puede cerrar con "Más tarde") |
+| `versionMinima` | `Number` | Si el instalado es menor, la ventana es obligatoria (sin "Más tarde", no se cierra con atrás). `0` = nunca obligatoria |
+| `mensaje` | `String` | Texto de la ventana; si está vacío se usa uno por defecto |
+| `urlDescarga` | `String` | Enlace al APK (Drive, Storage, etc.). Si está vacío no se muestra ninguna ventana |
 
 ### Firestore — colección `productos/{autoId}`
 
@@ -1185,6 +1204,13 @@ pueda reutilizarse.
     nada: Vertex AI ya devuelve `float32` y Firestore lo guarda tal cual).
   - El reporte se muestra en pantalla y además se registra completo en Logcat (tag
     `EvalVisual`) en formato Markdown, listo para copiar al documento de grado.
+- **Aviso de actualización** (`ActualizacionViewModel` + `DialogoActualizacion`, montados en
+  `AppNavigation`, sin ruta propia): la app se distribuye por APK, no por Play Store. Al
+  arrancar lee `configuracion/version` (una vez por arranque) y compara con el `versionCode`
+  instalado (`PackageManager`). Si `versionCode < versionMinima` la ventana es **obligatoria**;
+  si solo es menor que `versionActual`, es **opcional** ("Más tarde"). El botón "Actualizar"
+  abre `urlDescarga` y el usuario instala el APK a mano (Android no deja hacerlo solo). Sin
+  documento, sin URL, sin internet o con error de lectura no se muestra nada.
 - **Detalle y contacto** (`ProductDetailScreen` → `ProductDetailViewModel`): encadena dos
   lecturas (`obtenerProductoPorId` y, con el `artesanoId` del resultado,
   `obtenerUsuarioPorId`) porque Firestore no tiene joins. Al cargar el producto,
@@ -1292,7 +1318,8 @@ pueda reutilizarse.
   estado se ve sin reabrir la app.
 
   Un administrador (rol nuevo, ver más abajo) entra directo a `AdminRuacListScreen` al
-  iniciar sesión — es su único destino, no tiene Home propio. Ahí ve todos los artesanos
+  iniciar sesión — es su único destino, no tiene Home propio; ahí mismo tiene el botón
+  "Cerrar sesión" (`AdminRuacListViewModel.cerrarSesion`, vuelve a `Routes.WELCOME`). Ahí ve todos los artesanos
   con `ruacEstado == "pendiente"` (una sola consulta de igualdad, ordenada por fecha de
   solicitud en memoria para no depender de un índice compuesto — mismo criterio que
   `obtenerTodosLosProductosActivos`); tap en una fila abre `AdminRuacReviewScreen`, con los
@@ -1446,11 +1473,10 @@ ninguna de las dos como archivos estáticos por peso, así que cada `FontFamily`
 
 **Logo y eslogan**: el logo oficial es `res/drawable/logo1.png` y el eslogan es
 "Cultura viva a tu alcance" (`R.string.eslogan`, con traducción al inglés; el
-`contentDescription` es `logo_descripcion`). El logo se muestra **recortado en círculo**
+`contentDescription` es `logo_descripcion`). En Bienvenida el logo va **sin fondo** (`LogoSinFondo`: usa `logo2.png` y su luminosidad como transparencia, letras en `Marfil` sobre la foto). En los demás sitios el logo se muestra **recortado en círculo**
 (`LogoCircular`, con una ampliación de 1,3× dentro del círculo para que "MINKA ART" se lea
 en tamaños pequeños; el PNG es blanco sobre vinotinto, no se le quitó el fondo). Aparece en
-Bienvenida (`LogoMinka`: logo + eslogan, que reemplazó al antiguo `welcome_lema`, ya
-eliminado) y en el encabezado de Home cliente y Home artesano (solo logo + eslogan) y del
+Bienvenida (`LogoSinFondo` + eslogan debajo) y en el encabezado de Home cliente y Home artesano (solo logo + eslogan) y del
 panel del administrador "Solicitudes de RUAC" (con su título) — `LogoMinkaEncabezado`.
 Login, Selección de rol y Registro no llevan logo. No hay Splash Screen.
 
@@ -1518,6 +1544,32 @@ firebase deploy --only functions
 
 Detalle de la configuración en `functions/SETUP.md`.
 
+### Publicar una actualización (APK)
+
+El nombre que se ve bajo el ícono es **Minka Art** (`app_name` en los dos `strings.xml`; el
+tema y `rootProject.name` conservan `MinkaArt_bta` como identificador interno).
+
+**Firma de release**: la llave es `C:\Users\elkin\MinkaArt-llave\minkaart.jks` (alias
+`minkaart`), **fuera del repositorio y con copia de seguridad** — si se pierde, nadie podrá
+instalar la siguiente versión encima de la anterior. `app/build.gradle.kts` la lee de
+`keystore.properties` en la raíz (ignorado por git, junto con `*.jks`; la plantilla es
+`keystore.properties.example`); sin ese archivo el release sale sin firmar. Se compila con
+`.\gradlew.bat assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (~149 MB).
+SHA-1 de la llave: `BA:A0:7F:76:82:FB:E3:D4:1C:58:74:6A:15:D8:9D:18:62:25:83:E8`
+(SHA-256 `b533d3cf…626367`). **Hay que registrar ese SHA-1 en Firebase** (Project settings →
+app Android → *Add fingerprint*) y bajar el `google-services.json` nuevo, o "Continuar con
+Google" falla en el APK de release. Quien tenga instalada una versión *debug* debe
+desinstalarla una vez, porque la firma cambia. La firma no elimina el aviso de "orígenes
+desconocidos" de Android: eso solo lo quita Play Store.
+
+Cada versión nueva:
+1. Subir `versionCode` (y `versionName`) en `app/build.gradle.kts` (hoy `1` / `"1.0"`).
+2. Generar el APK firmado con la llave de release.
+3. Subir el APK (Drive con "cualquiera con el enlace", Storage, etc.) y copiar el enlace.
+4. En Firestore, editar `configuracion/version`: `versionActual` = el nuevo `versionCode` y
+   `urlDescarga` = el enlace; subir `versionMinima` solo si debe ser obligatoria. Ver
+   "Firestore — documento `configuracion/version`" y "Aviso de actualización".
+
 ### Inicio de sesión con Google
 
 Pasos manuales en Firebase Console (el código ya está, pero no funciona sin esto):
@@ -1572,6 +1624,9 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
 ## Estado actual y pendientes
 
 **Implementado**
+- Aviso de actualización sin Play Store (`configuracion/version`, ventana opcional u
+  obligatoria), botón "Cerrar sesión" del administrador, nombre visible "Minka Art", logo
+  sin fondo en Bienvenida y barra de búsqueda más compacta en el Home del cliente.
 - Términos y Condiciones obligatorios en todos los registros (con `aceptoTerminos`,
   `terminosAceptadosEn` y `versionTerminos` guardados), registro de artesano con
   departamentos y categorías de selección múltiple (`MinkaMultiSelectField`), tarjetas
@@ -1669,6 +1724,11 @@ genérico, no sabe "qué es" una pieza fuera de ese catálogo.
   visual" en Flujos principales.
 
 **Pendiente / placeholder**
+- **Aviso de actualización por desplegar**: la regla de `configuracion/version` (archivo `y`)
+  hay que desplegarla (`firebase deploy --only firestore:rules`) y el documento crearlo a
+  mano en Firebase Console; sin eso no sale ninguna ventana. La instalación del APK la hace
+  el usuario a mano (descarga + "orígenes desconocidos"); solo se compiló, no se probó en
+  dispositivo.
 - **Google Sign-In: configurado en el repo pero sin probar en dispositivo**:
   `app/google-services.json` ya trae los `oauth_client` (tipos 1 y 3), así que
   `R.string.default_web_client_id` existe y `assembleDebug` compila (verificado en el

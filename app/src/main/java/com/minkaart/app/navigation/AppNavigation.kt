@@ -2,7 +2,9 @@ package com.minkaart2.app.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -39,6 +41,8 @@ import com.minkaart2.app.ui.settings.AccountSettingsScreen
 import com.minkaart2.app.ui.terms.TermsScreen
 import com.minkaart2.app.ui.welcome.WelcomeScreen
 import com.minkaart2.app.ui.publication.MyProductsScreen
+import com.minkaart2.app.ui.components.DialogoActualizacion
+import com.minkaart2.app.viewModel.ActualizacionViewModel
 import com.minkaart2.app.viewModel.SesionViewModel
 
 @Composable
@@ -85,6 +89,28 @@ fun AppNavigation(tipoInicial: String? = null, referenciaInicial: String? = null
                 }
             }
         }
+    }
+
+    // Aviso de versión nueva (configuracion/version en Firestore): se consulta una vez por
+    // arranque y la ventana va sobre cualquier pantalla, incluida Bienvenida.
+    val actualizacionViewModel: ActualizacionViewModel = viewModel()
+    val contexto = LocalContext.current
+    val estadoActualizacion by actualizacionViewModel.estado
+
+    LaunchedEffect(Unit) {
+
+        val versionInstalada = contexto.packageManager
+            .getPackageInfo(contexto.packageName, 0)
+            .longVersionCode
+
+        actualizacionViewModel.verificar(versionInstalada)
+    }
+
+    estadoActualizacion?.let { estado ->
+        DialogoActualizacion(
+            estado = estado,
+            onMasTarde = { actualizacionViewModel.posponer() }
+        )
     }
 
     NavHost(

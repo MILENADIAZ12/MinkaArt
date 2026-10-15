@@ -16,3 +16,8 @@ local.properties
 
 minka_carga_100/serviceAccountKey.json
 minka_carga_100/node_modules/
+
+# Llave de firma de release (nunca al repositorio)
+keystore.properties
+*.jks
+*.keystore

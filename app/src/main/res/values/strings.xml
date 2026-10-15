@@ -319,4 +319,9 @@
     <string name="soporte_texto">¿Necesitas ayuda? Escríbenos a este correo y te responderemos lo antes posible:</string>
     <string name="soporte_copiar">Copiar correo</string>
     <string name="soporte_copiado">Correo copiado</string>
+    <string name="actualizacion_titulo">Actualización nueva</string>
+    <string name="actualizacion_texto_defecto">Hay una nueva versión de Minka Art con mejoras. Actualiza para seguir disfrutando la app.</string>
+    <string name="actualizacion_boton">Actualizar</string>
+    <string name="actualizacion_mas_tarde">Más tarde</string>
+    <string name="actualizacion_sin_app">No se pudo abrir el enlace de descarga</string>
 </resources>
