@@ -11,7 +11,8 @@ import com.google.firebase.Timestamp
  *
  * [tipo] es una de: "venta" (venta registrada, destinatario cliente), "valoracion"
  * (valoración recibida, destinatario artesano), "like" (me gusta recibido, destinatario
- * artesano), "ruac_aprobado" / "ruac_rechazado" (revisión de RUAC, destinatario
+ * artesano), "publicacion" (producto nuevo de un artesano al que se sigue, destinatario
+ * seguidor), "ruac_aprobado" / "ruac_rechazado" (revisión de RUAC, destinatario
  * artesano). [referenciaId] cambia de significado según [tipo]: ventaId, productoId o
  * uid del artesano — ver `Routes.rutaDeNotificacion`, que es el único lugar que interpreta
  * esa combinación para navegar.

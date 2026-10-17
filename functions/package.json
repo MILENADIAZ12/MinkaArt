@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions para MinkaArt - verificación de correo por código",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {

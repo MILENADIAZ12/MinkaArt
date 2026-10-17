@@ -81,7 +81,10 @@ visual — ver "Configuración de Google Cloud (búsqueda visual)" más abajo pa
 detalle exacto de lo que hay que habilitar/configurar.
 
 Además del proyecto Android, el repositorio incluye `functions/`: un backend de Cloud
-Functions en Node.js + TypeScript (`onCall`/`onDocumentWritten`, v2) que genera y valida
+Functions en Node.js 22 + TypeScript (`engines.node` en `functions/package.json`; Node 20 se
+retira el 2026-10-30). Al desplegar en Windows puede hacer falta
+`$env:FUNCTIONS_DISCOVERY_TIMEOUT="120"` antes de `firebase deploy --only functions`
+(`onCall`/`onDocumentWritten`, v2) que genera y valida
 el código de verificación de correo y lo envía por [Resend](https://resend.com) (y también el enlace de cambio de contraseña), y que además calcula los embeddings de la búsqueda
 visual con Vertex AI (`google-auth-library`) y los compara con Firestore vector search
 (`@google-cloud/firestore`, empaquetado dentro de `firebase-admin`). Ver
@@ -151,6 +154,7 @@ app/src/main/
 │   ├── AuthRepository.kt     # login, rol de usuario, recuperar contraseña, datos de usuarios, actualizar campos, cerrar sesión
 │   ├── ConfiguracionRepository.kt # lee "configuracion/version" (aviso de actualización)
 │   ├── NotificationRepository.kt # leer notificaciones y marcarlas como leídas (nunca las crea)
+│   ├── SeguidoresRepository.kt # seguir/dejar de seguir a un artesano, ¿lo sigo?, conteo de seguidores
 │   ├── ProductRepository.kt  # guardar/editar/eliminar producto, consultas por id/artesano/lote de ids, like con transacción
 │   └── VisualSearchRepository.kt # CRUD de "huellasVisuales" — motor ANTERIOR, en
 │                                   # transición, solo lo lee "Evaluar búsqueda visual"
@@ -235,6 +239,7 @@ app/src/main/
     │   ├── LogoMinka.kt           # LogoCircular (logo1 recortado en círculo), LogoSinFondo (logo2 sin fondo,
     │   │                         # teñido; Bienvenida), LogoMinka (+ eslogan, hoy sin uso) y LogoMinkaEncabezado (logo + eslogan, título opcional; Home cliente/artesano
     │   │                         # y panel del administrador)
+    │   ├── RedesSociales.kt       # FilaRedesSociales: logos de Instagram/TikTok/YouTube (ic_instagram/ic_tiktok/ic_youtube, vectores propios) que abren la red; urlDeRedSocial()
     │   ├── IconoNotificaciones.kt # IconoAccion (círculo vinotinto + pictograma blanco + punto/píldora de novedad azul claro) y la campana que lo usa; compartido por los dos Home
     │   ├── MinkaDropdownField.kt  # selector de una lista fija (Departamento/Categoría/Clasificación)
     │   └── EfectoNotificaciones.kt # pide permiso de notificaciones + guarda el token FCM
@@ -244,7 +249,7 @@ app/src/main/
     │   └── PanelFiltros.kt        # bottom sheet de filtros (material, ubicación, color, tamaño; selección múltiple) + FiltrosCatalogo
     ├── login/LoginScreen.kt
     ├── notifications/NotificationsScreen.kt # centro de notificaciones, abierto desde la campana
-    ├── product/ProductDetailScreen.kt  # detalle, artesano, calidad/confianza, contacto WhatsApp
+    ├── product/ProductDetailScreen.kt  # detalle (descripción, historia, materia prima, clasificación, color —con un cuadrito del color elegido—, tamaño, ubicación), artesano, calidad/confianza, contacto WhatsApp
     ├── profile/
     │   ├── ArtisanProfileScreen.kt  # perfil público del artesano, editable por su dueño
     │   ├── ClientProfileScreen.kt   # menú del cliente: info básica, likes, cerrar sesión
@@ -398,7 +403,17 @@ el `uid` de Firebase Auth.
 | `ruacRevisadoPor` | `String?` | `uid` del administrador que aprobó/rechazó (auditoría) |
 | `bio` | `String?` | Solo artesano; texto corto "Sobre mí" en su Perfil, editable por él mismo |
 | `contactoPublico` | `String?` | Solo artesano; el contacto que decide mostrar públicamente (puede ser distinto de `telefono`). `ProductDetailScreen` lo usa para "Contactar artesano", con `telefono` como respaldo si está vacío |
+| `instagram` / `tiktok` / `youtube` | `String?` | Solo artesano; usuario (con o sin `@`) o enlace completo de cada red, editable por él en su perfil (ícono de lápiz junto a los logos). `null`/vacío = no la tiene. `urlDeRedSocial` (`ui/components/RedesSociales.kt`) lo convierte en URL https |
 | `fcmToken` | `String?` | Token de Firebase Cloud Messaging del dispositivo actual. Se guarda/actualiza al abrir `HomeClienteScreen`/`HomeArtesanoScreen` (`EfectoNotificaciones`) y cuando el token rota (`MinkaMessagingService.onNewToken`). `null` hasta que el usuario abre la app al menos una vez tras este ajuste |
+
+### Firestore — subcolección `usuarios/{artesanoId}/seguidores/{seguidorId}`
+
+Quién sigue a un artesano (`SeguidoresRepository`). Campos: `seguidorId` (uid) y `creadoEn`
+(`serverTimestamp`). No hay contador en el documento del artesano: el número de seguidores
+sale de una consulta de conteo (`count()`) sobre la subcolección. Reglas (archivo `y`):
+lectura para autenticados; cada usuario solo crea/borra su propio documento y no puede
+seguirse a sí mismo. **Hay que desplegar las reglas** (`firebase deploy --only firestore:rules`)
+y la nueva función (`firebase deploy --only functions`).
 
 Desde la Fase 3, cualquier usuario autenticado puede leer el documento de **cualquier**
 usuario (antes solo el propio uid) — necesario para que el cliente vea el perfil del
@@ -758,7 +773,7 @@ marcarlo como leído.
 |---|---|---|
 | `id` | `String` | Igual al id del documento |
 | `destinatarioId` | `String` | `uid` de quien debe ver la notificación |
-| `tipo` | `String` | `"venta"` \| `"valoracion"` \| `"like"` \| `"ruac_aprobado"` \| `"ruac_rechazado"` |
+| `tipo` | `String` | `"venta"` \| `"valoracion"` \| `"like"` \| `"publicacion"` \| `"seguidor"` \| `"ruac_aprobado"` \| `"ruac_rechazado"` |
 | `titulo` / `mensaje` | `String` | Texto mostrado en la fila y en el push de FCM |
 | `referenciaId` | `String` | Cambia de significado según `tipo`: `ventaId` (venta), `productoId` (valoracion/like) o el propio `uid` del artesano (ruac_aprobado/rechazado) — `Routes.rutaDeNotificacion(tipo, referenciaId)` es el único lugar que interpreta esta combinación para navegar |
 | `leida` | `Boolean` | Por defecto `false` |
@@ -769,7 +784,7 @@ La consulta de `NotificationRepository.obtenerNotificaciones` es una sola iguald
 criterio que `obtenerTodosLosProductosActivos`/`obtenerVentasDelCliente` — no hace falta
 ningún índice compuesto nuevo en `firestore.indexes.json`.
 
-Las cuatro Cloud Functions que escriben aquí comparten el helper `avisar()` en
+Las seis Cloud Functions que escriben aquí comparten el helper `avisar()` en
 `functions/src/index.ts`, que además envía el push de FCM (`data`-only, mismo criterio ya
 documentado abajo) si `usuarios/{destinatarioId}.fcmToken` existe:
 
@@ -777,6 +792,11 @@ documentado abajo) si `usuarios/{destinatarioId}.fcmToken` existe:
 - `notificarNuevaValoracion` (trigger en `valoraciones/{ventaId}`) → artesano.
 - `notificarLikeNuevo` (trigger en `productos/{productId}/likes/{userId}`) → artesano
   dueño del producto, salvo que se dé like a sí mismo.
+- `notificarNuevoSeguidor` (trigger de creación en `usuarios/{artesanoId}/seguidores/{seguidorId}`)
+  → el artesano (`tipo = "seguidor"`, `referenciaId` = su propio uid, abre su perfil).
+- `notificarNuevaPublicacion` (trigger de creación en `productos/{productId}`) → cada
+  seguidor del artesano (`tipo = "publicacion"`, `referenciaId` = `productId`, abre el
+  Detalle). No avisa si el producto nace con `activo == false`.
 - `notificarCambioRuac` (trigger en `usuarios/{uid}`, solo si `ruacEstado` cambió a
   `"verificado"` o `"rechazado"`) → el propio artesano.
 
@@ -1242,7 +1262,10 @@ pueda reutilizarse.
   también el contador de imágenes). Las validaciones siguen viviendo en los ViewModel.
 - **Perfil del artesano** (`ArtisanProfileScreen` → `ArtisanProfileViewModel`): cabecera
   con el mismo patrón + degradado de Entrada/Login (`PatternBackground`), avatar, chip de
-  RUAC, bio y contacto público, estadísticas (cantidad de productos, suma de `likes`),
+  RUAC, bio y contacto público, logos de redes sociales (Instagram, TikTok, YouTube; el
+  dueño las edita con un lápiz), botón **Seguir / Siguiendo** (solo en perfiles ajenos; los
+  seguidores reciben una notificación al publicar un producto nuevo),
+  estadísticas (cantidad de productos y **número de seguidores**, que reemplazó a "Likes totales"),
   `BarraValoracion` sobre el promedio de los productos del artesano, y su grilla de
   productos (`ProductoFeedCard`, compartida con el feed del cliente). Si
   `currentUserId == artesanoId`, aparece un ícono de editar junto al contacto que abre un
@@ -1563,9 +1586,13 @@ desinstalarla una vez, porque la firma cambia. La firma no elimina el aviso de "
 desconocidos" de Android: eso solo lo quita Play Store.
 
 Cada versión nueva:
-1. Subir `versionCode` (y `versionName`) en `app/build.gradle.kts` (hoy `1` / `"1.0"`).
+1. Subir `versionCode` (y `versionName`) en `app/build.gradle.kts` (hoy `3` / `"1.2"`).
 2. Generar el APK firmado con la llave de release.
-3. Subir el APK (Drive con "cualquiera con el enlace", Storage, etc.) y copiar el enlace.
+3. Subir el APK y copiar el enlace. Desde la versión 3 se aloja en **Firebase Hosting**:
+   copiar `app/build/outputs/apk/release/app-release.apk` a `descargas/minka-art.apk`
+   (carpeta ignorada por git, configurada en `firebase.json` → `hosting`) y correr
+   `firebase deploy --only hosting`; el enlace fijo es `https://minka-art.web.app/minka-art.apk`.
+   (Las versiones 1 y 2 se repartieron por Drive.)
 4. En Firestore, editar `configuracion/version`: `versionActual` = el nuevo `versionCode` y
    `urlDescarga` = el enlace; subir `versionMinima` solo si debe ser obligatoria. Ver
    "Firestore — documento `configuracion/version`" y "Aviso de actualización".

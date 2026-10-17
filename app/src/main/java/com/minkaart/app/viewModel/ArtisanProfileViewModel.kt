@@ -10,12 +10,14 @@ import com.minkaart2.app.data.model.User
 import com.minkaart2.app.repository.AuthRepository
 import com.minkaart2.app.repository.ProductRepository
 import com.minkaart2.app.repository.SaleRepository
+import com.minkaart2.app.repository.SeguidoresRepository
 
 class ArtisanProfileViewModel : ViewModel() {
 
     private val authRepository = AuthRepository()
     private val productRepository = ProductRepository()
     private val saleRepository = SaleRepository()
+    private val seguidoresRepository = SeguidoresRepository()
 
     private val _artesano = mutableStateOf<User?>(null)
     val artesano: State<User?> = _artesano
@@ -31,6 +33,12 @@ class ArtisanProfileViewModel : ViewModel() {
     // promediando Product.confianzaPromedio (campo que ni siquiera existe ya).
     private val _statsArtesano = mutableStateOf(ArtesanoStats())
     val statsArtesano: State<ArtesanoStats> = _statsArtesano
+
+    private val _numeroSeguidores = mutableStateOf(0L)
+    val numeroSeguidores: State<Long> = _numeroSeguidores
+
+    private val _siguiendo = mutableStateOf(false)
+    val siguiendo: State<Boolean> = _siguiendo
 
     private val _cargando = mutableStateOf(true)
     val cargando: State<Boolean> = _cargando
@@ -71,6 +79,71 @@ class ArtisanProfileViewModel : ViewModel() {
             artesanoId = artesanoId,
             onSuccess = { stats -> _statsArtesano.value = stats },
             onError = { /* el indicador de confianza simplemente queda en gris */ }
+        )
+
+        seguidoresRepository.contarSeguidores(
+            artesanoId = artesanoId,
+            onSuccess = { _numeroSeguidores.value = it },
+            onError = { /* el contador se queda en su último valor */ }
+        )
+
+        seguidoresRepository.estaSiguiendo(
+            artesanoId = artesanoId,
+            onSuccess = { _siguiendo.value = it },
+            onError = { /* se asume que no lo sigue */ }
+        )
+    }
+
+    fun alternarSeguimiento(
+        artesanoId: String,
+        onSuccess: (Boolean) -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        val estabaSiguiendo = _siguiendo.value
+
+        seguidoresRepository.alternarSeguimiento(
+            artesanoId = artesanoId,
+            siguiendoActualmente = estabaSiguiendo,
+            onSuccess = { ahoraSigue ->
+
+                _siguiendo.value = ahoraSigue
+                _numeroSeguidores.value =
+                    (_numeroSeguidores.value + if (ahoraSigue) 1 else -1).coerceAtLeast(0)
+
+                onSuccess(ahoraSigue)
+            },
+            onError = onError
+        )
+    }
+
+    fun actualizarRedesSociales(
+        artesanoId: String,
+        instagram: String,
+        tiktok: String,
+        youtube: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+
+        authRepository.actualizarCamposUsuario(
+            uid = artesanoId,
+            campos = mapOf(
+                "instagram" to instagram.trim(),
+                "tiktok" to tiktok.trim(),
+                "youtube" to youtube.trim()
+            ),
+            onSuccess = {
+
+                _artesano.value = _artesano.value?.copy(
+                    instagram = instagram.trim(),
+                    tiktok = tiktok.trim(),
+                    youtube = youtube.trim()
+                )
+
+                onSuccess()
+            },
+            onError = onError
         )
     }
 

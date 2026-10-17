@@ -416,6 +416,92 @@ export const notificarLikeNuevo = onDocumentCreated(
 );
 
 /**
+ * Notifica al artesano cuando alguien empieza a seguirlo. `referenciaId` es el uid del
+ * propio artesano: al tocar el aviso se abre su perfil.
+ */
+export const notificarNuevoSeguidor = onDocumentCreated(
+  "usuarios/{artesanoId}/seguidores/{seguidorId}",
+  async (event) => {
+    const artesanoId = event.params.artesanoId;
+    const seguidorId = event.params.seguidorId;
+
+    try {
+      if (artesanoId === seguidorId) {
+        return;
+      }
+
+      const seguidorSnap = await db.collection("usuarios").doc(seguidorId).get();
+      const nombre = (seguidorSnap.get("nombre") as string | undefined) ?? "Alguien";
+
+      await avisar(
+        artesanoId,
+        "seguidor",
+        "Nuevo seguidor",
+        `${nombre} empezó a seguirte`,
+        artesanoId
+      );
+    } catch (error) {
+      logger.error("notificarNuevoSeguidor: fallo al enviar la notificación", error);
+    }
+  }
+);
+
+/**
+ * Notifica a los seguidores de un artesano cuando publica un producto nuevo. Los
+ * seguidores viven en `usuarios/{artesanoId}/seguidores/{seguidorId}`. Un error con un
+ * seguidor no impide avisar a los demás.
+ */
+export const notificarNuevaPublicacion = onDocumentCreated(
+  "productos/{productId}",
+  async (event) => {
+    const productId = event.params.productId;
+    const datos = event.data?.data();
+
+    try {
+      const artesanoId = datos?.artesanoId as string | undefined;
+
+      if (!artesanoId) {
+        return;
+      }
+
+      if (datos?.activo === false) {
+        return;
+      }
+
+      const seguidoresSnap = await db
+        .collection("usuarios")
+        .doc(artesanoId)
+        .collection("seguidores")
+        .get();
+
+      if (seguidoresSnap.empty) {
+        return;
+      }
+
+      const artesanoSnap = await db.collection("usuarios").doc(artesanoId).get();
+      const nombreArtesano = (artesanoSnap.get("nombre") as string | undefined) ?? "Un artesano";
+      const nombreProducto = (datos?.nombre as string | undefined) ?? "un producto nuevo";
+
+      for (const seguidor of seguidoresSnap.docs) {
+        try {
+          await avisar(
+            seguidor.id,
+            "publicacion",
+            "Nueva publicación",
+            `${nombreArtesano} publicó "${nombreProducto}"`,
+            productId
+          );
+        } catch (error) {
+          logger.error(`notificarNuevaPublicacion: fallo con el seguidor ${seguidor.id}`, error);
+        }
+      }
+    } catch (error) {
+      logger.error("notificarNuevaPublicacion: fallo al enviar las notificaciones", error);
+    }
+  }
+);
+
+/**
  * Notifica al artesano cuando un administrador aprueba o rechaza su solicitud de RUAC
  * (Fase 5). Solo actúa si `ruacEstado` cambió y el nuevo valor es uno de los dos estados
  * finales de una revisión — evita disparar en cualquier otro update del documento de

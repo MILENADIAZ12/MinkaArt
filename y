@@ -174,6 +174,22 @@ service cloud.firestore {
     }
 
     // =========================
+    // SEGUIDORES DE UN ARTESANO
+    // =========================
+    // usuarios/{artesanoId}/seguidores/{seguidorId}: cada usuario solo crea/borra su propio
+    // documento de seguimiento (y no puede seguirse a sí mismo). Lectura para autenticados
+    // (cuenta de seguidores y "¿lo sigo?").
+    match /usuarios/{artesanoId}/seguidores/{seguidorId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.auth.uid == seguidorId
+                    && seguidorId != artesanoId;
+      allow delete: if request.auth != null
+                    && request.auth.uid == seguidorId;
+      allow update: if false;
+    }
+
+    // =========================
     // HUELLAS VISUALES (Reconocimiento visual)
     // =========================
     match /huellasVisuales/{productId} {

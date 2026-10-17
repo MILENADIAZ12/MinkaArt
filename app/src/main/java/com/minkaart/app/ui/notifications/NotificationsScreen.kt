@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
@@ -302,6 +303,7 @@ private fun iconoDeTipo(tipo: String): ImageVector = when (tipo) {
     "venta" -> Icons.Filled.ShoppingCart
     "valoracion" -> Icons.Filled.Star
     "like" -> Icons.Filled.Favorite
+    "publicacion", "seguidor" -> Icons.Filled.Person
     "ruac_aprobado", "ruac_rechazado" -> Icons.Filled.CheckCircle
     else -> Icons.Filled.Notifications
 }

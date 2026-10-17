@@ -64,8 +64,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
+import com.minkaart2.app.R
+import androidx.compose.ui.res.stringResource
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BarraValoracion
+import com.minkaart2.app.ui.components.FilaRedesSociales
+import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.ui.components.OutlineButton
 import com.minkaart2.app.ui.components.IconoCamara
 import com.minkaart2.app.ui.components.PatternBackground
 import com.minkaart2.app.ui.components.ProductoFeedCard
@@ -98,6 +103,9 @@ fun ArtisanProfileScreen(
 
     var mostrarDialogoEditar by remember { mutableStateOf(false) }
     var mostrarDialogoEliminarRuac by remember { mutableStateOf(false) }
+    var mostrarDialogoRedes by remember { mutableStateOf(false) }
+    val numeroSeguidores by viewModel.numeroSeguidores
+    val siguiendo by viewModel.siguiendo
 
     val selectorFoto = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -478,6 +486,107 @@ fun ArtisanProfileScreen(
                         }
                     }
 
+                    // Redes sociales: logos que abren la red; el dueño además puede editarlas.
+                    val tieneRedes = !artesano?.instagram.isNullOrBlank() ||
+                        !artesano?.tiktok.isNullOrBlank() ||
+                        !artesano?.youtube.isNullOrBlank()
+
+                    if (tieneRedes || esPerfilPropio) {
+
+                        Row(
+                            modifier = Modifier.padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+
+                            FilaRedesSociales(
+                                instagram = artesano?.instagram,
+                                tiktok = artesano?.tiktok,
+                                youtube = artesano?.youtube
+                            )
+
+                            if (esPerfilPropio) {
+
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = stringResource(R.string.editar_redes),
+                                    tint = Borgona,
+                                    modifier = Modifier
+                                        .padding(start = if (tieneRedes) 14.dp else 0.dp)
+                                        .size(14.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { mostrarDialogoRedes = true }
+                                        )
+                                )
+
+                                if (!tieneRedes) {
+
+                                    Text(
+                                        text = stringResource(R.string.editar_redes),
+                                        color = Borgona,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Seguir al artesano: recibe aviso cuando publique un producto nuevo.
+                    if (!esPerfilPropio) {
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (siguiendo) {
+
+                            OutlineButton(
+                                text = stringResource(R.string.siguiendo),
+                                onClick = {
+                                    viewModel.alternarSeguimiento(
+                                        artesanoId = artesanoId,
+                                        onSuccess = {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.dejaste_de_seguir),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        },
+                                        onError = { mensaje ->
+                                            Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(0.6f),
+                                borderColor = Borgona,
+                                textColor = Borgona
+                            )
+
+                        } else {
+
+                            GradientButton(
+                                text = stringResource(R.string.seguir),
+                                onClick = {
+                                    viewModel.alternarSeguimiento(
+                                        artesanoId = artesanoId,
+                                        onSuccess = {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.ahora_sigues),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        },
+                                        onError = { mensaje ->
+                                            Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(0.6f)
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Row(
@@ -491,8 +600,8 @@ fun ArtisanProfileScreen(
                         )
 
                         EstadisticaItem(
-                            valor = productos.sumOf { it.likes }.toString(),
-                            etiqueta = "Likes totales"
+                            valor = numeroSeguidores.toString(),
+                            etiqueta = stringResource(R.string.seguidores)
                         )
                     }
 
@@ -664,6 +773,76 @@ fun ArtisanProfileScreen(
             dismissButton = {
 
                 TextButton(onClick = { mostrarDialogoEditar = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (mostrarDialogoRedes) {
+
+        var instagramEditado by remember { mutableStateOf(artesano?.instagram ?: "") }
+        var tiktokEditado by remember { mutableStateOf(artesano?.tiktok ?: "") }
+        var youtubeEditado by remember { mutableStateOf(artesano?.youtube ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { mostrarDialogoRedes = false },
+            title = { Text(stringResource(R.string.redes_sociales)) },
+            text = {
+                Column {
+
+                    listOf(
+                        Triple<String, String, (String) -> Unit>("Instagram", instagramEditado, { instagramEditado = it }),
+                        Triple<String, String, (String) -> Unit>("TikTok", tiktokEditado, { tiktokEditado = it }),
+                        Triple<String, String, (String) -> Unit>("YouTube", youtubeEditado, { youtubeEditado = it })
+                    ).forEachIndexed { indice, (nombre, valor, alCambiar) ->
+
+                        if (indice > 0) Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = valor,
+                            onValueChange = alCambiar,
+                            label = { Text("$nombre (${stringResource(R.string.red_usuario_o_enlace)})") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+
+                TextButton(
+                    onClick = {
+
+                        viewModel.actualizarRedesSociales(
+                            artesanoId = artesanoId,
+                            instagram = instagramEditado,
+                            tiktok = tiktokEditado,
+                            youtube = youtubeEditado,
+
+                            onSuccess = {
+
+                                mostrarDialogoRedes = false
+
+                                Toast.makeText(
+                                    context,
+                                    "Perfil actualizado",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+
+                            onError = { mensaje ->
+                                Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                            }
+                        )
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+
+                TextButton(onClick = { mostrarDialogoRedes = false }) {
                     Text("Cancelar")
                 }
             }

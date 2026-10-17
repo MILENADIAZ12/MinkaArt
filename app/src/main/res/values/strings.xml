@@ -131,6 +131,10 @@
     <string name="detalle_descripcion">Descripción</string>
     <string name="detalle_historia">Historia y proceso</string>
     <string name="detalle_region">Región de origen</string>
+    <string name="detalle_materia_prima">Materia prima</string>
+    <string name="detalle_clasificacion">Clasificación</string>
+    <string name="detalle_color">Color</string>
+    <string name="detalle_tamano">Tamaño</string>
     <string name="calidad">Calidad</string>
     <string name="confianza">Confianza</string>
     <string name="sin_verificaciones">Sin verificaciones</string>
@@ -324,4 +328,13 @@
     <string name="actualizacion_boton">Actualizar</string>
     <string name="actualizacion_mas_tarde">Más tarde</string>
     <string name="actualizacion_sin_app">No se pudo abrir el enlace de descarga</string>
+    <string name="seguir">Seguir</string>
+    <string name="siguiendo">Siguiendo</string>
+    <string name="seguidores">Seguidores</string>
+    <string name="ahora_sigues">Ahora sigues a este artesano</string>
+    <string name="dejaste_de_seguir">Dejaste de seguir a este artesano</string>
+    <string name="redes_sociales">Redes sociales</string>
+    <string name="red_usuario_o_enlace">Usuario o enlace</string>
+    <string name="no_se_pudo_abrir_red">No se pudo abrir la red social</string>
+    <string name="editar_redes">Editar redes sociales</string>
 </resources>

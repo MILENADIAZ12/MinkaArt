@@ -57,6 +57,11 @@ data class User(
     val bio: String? = null,
     val contactoPublico: String? = null,
 
+    // Redes sociales del artesano: usuario (con o sin @) o enlace completo. null = no tiene.
+    val instagram: String? = null,
+    val tiktok: String? = null,
+    val youtube: String? = null,
+
     // Foto de perfil (cliente o artesano) — Storage: usuarios/{uid}/foto_perfil.
     // null hasta que el usuario sube una; se muestra un ícono por defecto mientras tanto.
     val fotoUrl: String? = null,

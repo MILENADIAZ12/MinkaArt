@@ -21,3 +21,6 @@ minka_carga_100/node_modules/
 keystore.properties
 *.jks
 *.keystore
+
+# APK publicado en Firebase Hosting (carpeta descargas/)
+descargas/*.apk

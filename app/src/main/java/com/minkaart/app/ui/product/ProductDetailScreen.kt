@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import com.minkaart2.app.ui.theme.BordeCampo
+import com.minkaart2.app.ui.theme.muestraDeColor
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -66,7 +72,12 @@ import com.minkaart2.app.R
 import com.minkaart2.app.navigation.Routes
 import com.minkaart2.app.ui.components.BarraValoracion
 import com.minkaart2.app.ui.components.GradientButton
+import com.minkaart2.app.data.CatalogosProducto
 import com.minkaart2.app.util.etiquetaCategoria
+import com.minkaart2.app.util.etiquetaClasificacion
+import com.minkaart2.app.util.etiquetaColor
+import com.minkaart2.app.util.etiquetaMateriaPrima
+import com.minkaart2.app.util.etiquetaTamano
 import com.minkaart2.app.viewModel.ProductDetailViewModel
 import java.net.URLEncoder
 
@@ -279,7 +290,14 @@ fun ProductDetailScreen(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = etiquetaCategoria(productoActual.categoria),
+                                text = if (
+                                    productoActual.categoria == CatalogosProducto.CATEGORIA_OTROS &&
+                                    !productoActual.categoriaOtro.isNullOrBlank()
+                                ) {
+                                    productoActual.categoriaOtro
+                                } else {
+                                    etiquetaCategoria(productoActual.categoria)
+                                },
                                 color = AzulAcero,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
@@ -291,7 +309,37 @@ fun ProductDetailScreen(
 
                     SeccionTexto(titulo = stringResource(R.string.detalle_descripcion), texto = productoActual.descripcion)
                     SeccionTexto(titulo = stringResource(R.string.detalle_historia), texto = productoActual.historiaProceso)
-                    SeccionTexto(titulo = stringResource(R.string.detalle_region), texto = productoActual.regionOrigen)
+
+                    // Materia prima: si eligió "Otra", se muestra lo que escribió el artesano.
+                    val materiaPrimaMostrada = if (
+                        productoActual.materiaPrima == CatalogosProducto.MATERIA_PRIMA_OTRA &&
+                        !productoActual.materiaPrimaOtro.isNullOrBlank()
+                    ) {
+                        productoActual.materiaPrimaOtro
+                    } else {
+                        etiquetaMateriaPrima(productoActual.materiaPrima)
+                    }
+
+                    SeccionTexto(titulo = stringResource(R.string.detalle_materia_prima), texto = materiaPrimaMostrada)
+                    SeccionTexto(
+                        titulo = stringResource(R.string.detalle_clasificacion),
+                        texto = productoActual.clasificacion?.let { etiquetaClasificacion(it) } ?: ""
+                    )
+                    SeccionColor(
+                        titulo = stringResource(R.string.detalle_color),
+                        valor = productoActual.color,
+                        texto = etiquetaColor(productoActual.color)
+                    )
+                    SeccionTexto(titulo = stringResource(R.string.detalle_tamano), texto = etiquetaTamano(productoActual.tamano))
+
+                    // Ubicación: municipio + departamento; los productos anteriores solo
+                    // tienen regionOrigen (texto libre), que se usa como respaldo.
+                    val ubicacion = listOf(productoActual.municipio, productoActual.departamento)
+                        .filter { it.isNotBlank() }
+                        .joinToString(", ")
+                        .ifBlank { productoActual.regionOrigen }
+
+                    SeccionTexto(titulo = stringResource(R.string.detalle_region), texto = ubicacion)
 
                     // Fila del artesano — el contacto público (editable por el propio
                     // artesano desde su perfil) tiene prioridad; si no lo configuró, se
@@ -302,6 +350,9 @@ fun ProductDetailScreen(
                         ?.ifBlank { null }
                         ?: datosArtesano?.telefono
                         ?: ""
+
+                    // Separa el último dato (ubicación) de la fila del artesano.
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Row(
                         modifier = Modifier
@@ -473,6 +524,64 @@ private fun SeccionTexto(titulo: String, texto: String) {
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier.padding(bottom = 4.dp)
     )
+}
+
+/**
+ * Igual que [SeccionTexto], pero con un cuadrito del color que asignó el artesano
+ * (`Product.color`) junto al nombre. Multicolor se dibuja con degradado; Blanco y Natural
+ * llevan borde fino para que se vean sobre el fondo blanco.
+ */
+@Composable
+private fun SeccionColor(titulo: String, valor: String, texto: String) {
+
+    if (texto.isBlank()) return
+
+    val forma = RoundedCornerShape(5.dp)
+    val solido = muestraDeColor(valor)
+
+    Text(
+        text = titulo.uppercase(),
+        color = Guinda,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+    )
+
+    Row(
+        modifier = Modifier.padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        if (solido != null || valor == "Multicolor") {
+
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(forma)
+                    .background(
+                        brush = if (solido != null) {
+                            SolidColor(solido)
+                        } else {
+                            Brush.sweepGradient(
+                                listOf(
+                                    Color.Red, Color.Yellow, Color.Green, Color.Cyan,
+                                    Color.Blue, Color.Magenta, Color.Red
+                                )
+                            )
+                        }
+                    )
+                    .border(1.dp, BordeCampo, forma)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Text(
+            text = texto,
+            color = TextoSecundario,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
 }
 
 /**

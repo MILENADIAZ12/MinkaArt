@@ -122,7 +122,8 @@ object Routes {
     fun rutaDeNotificacion(tipo: String, referenciaId: String): String? = when (tipo) {
         "venta" -> rateSaleRoute(referenciaId)
         "valoracion" -> qualityTrustRoute(referenciaId)
-        "like" -> productDetailRoute(referenciaId)
+        "like", "publicacion" -> productDetailRoute(referenciaId)
+        "seguidor" -> artisanProfileRoute(referenciaId)
         "ruac_aprobado" -> ruacBadgeRoute(referenciaId)
         "ruac_rechazado" -> REQUEST_RUAC
         else -> null
